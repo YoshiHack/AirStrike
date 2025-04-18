@@ -1,8 +1,4 @@
-     _     _        ____   _          _  _
-    / \   (_) _ __ / ___| | |_  _ __ (_)| | __  ___ 
-   / _ \  | || '__|\___ \ | __|| '__|| || |/ / / _ \
-  / ___ \ | || |    ___) || |_ | |   | ||   < |  __/
- /_/   \_\|_||_|   |____/  \__||_|   |_||_|\_\ \___|
+![alt text](image.png)
 
 AirStrike is a modular, Python-based WiFi hacking framework developed as a graduation project. It provides powerful tools for:
 
