@@ -47,10 +47,10 @@ def deauth_menu():
     if not bssid or not channel:
         return
 
-    # ↓↓↓ NEW: switch to monitor mode
+    # switch to monitor mode
     set_monitor_mode(interface)
 
-    # ↓↓↓ NEW: lock the NIC on the victim's channel
+    # lock the NIC on the victim's channel
     try:
         subprocess.run(['sudo', 'iwconfig', interface, 'channel', str(channel)], check=True)
         print(f"[Setup] Interface {interface} set to channel {channel}")
