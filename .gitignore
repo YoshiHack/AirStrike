@@ -1,23 +1,2 @@
-# Python cache
-__pycache__/
-*.py[cod]
-
-# Virtual environment folders
-venv/
-env/
-
-# OS-specific files
-.DS_Store
-Thumbs.db
-
-# Log files and temporary files
-*.log
-*.tmp
-
-# Capture directories (if you don't want to version captured files)
-captures/
-
-# Other sensitive or configuration files
-config.py
-
-pass.txt
+# Created by venv; see https://docs.python.org/3/library/venv.html
+*
