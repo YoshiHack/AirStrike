@@ -7,6 +7,7 @@ from utils.banner import banner, team
 from utils.network_utils import set_managed_mode, set_monitor_mode, run_scan, display_and_choose_ap
 from attacks.deauth_attack import deauth_worker
 from attacks.capture_attack import capture_worker
+from attacks.evil_twin import EvilTwin
 
 # Global configuration
 interface = "wlan0"
@@ -20,7 +21,8 @@ def main_menu():
         print("="*40)
         print("1. Deauth Attack")
         print("2. Handshake Cracker")
-        print("3. Exit")
+        print("3. Evil Twin Attack")
+        print("0. Exit")
         
         choice = input("\nSelect an option (1-3): ").strip()
         
@@ -29,6 +31,9 @@ def main_menu():
         elif choice == "2":
             cracker_menu()
         elif choice == "3":
+            print("Evil Twin Attack is not implemented yet.")
+            #evil_twin_menu()  # Uncomment when implemented
+        elif choice == "0":
             print("Exiting...")
             break
         else:
@@ -219,6 +224,21 @@ def get_bssid_from_cap(cap_file):
     except Exception as e:
         print(f"Error getting BSSID: {e}")
         return ""
+    
+def evil_twin_menu():
+    set_monitor_mode(interface)
+    ssid = input("Enter SSID to clone: ")
+    channel = input("Enter channel number: ")
+    et = EvilTwin(interface+'mon', ssid, channel)
+    et.prepare()
+    print("Starting Evil Twin... Press Ctrl+C to stop.")
+    et.start()
+    try:
+        while True: time.sleep(1)
+    except KeyboardInterrupt:
+        print("Stopping Evil Twin...")
+        et.stop()
+        set_managed_mode(interface)
 
 if __name__ == "__main__":
     print(banner("AirStrike"))
