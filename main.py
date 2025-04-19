@@ -224,20 +224,24 @@ def get_bssid_from_cap(cap_file):
         print(f"Error getting BSSID: {e}")
         return ""
     
+
 def evil_twin_menu():
-    set_monitor_mode(interface)
-    ssid = input("Enter SSID to clone: ")
-    channel = input("Enter channel number: ")
-    et = EvilTwin(interface+'mon', ssid, channel)
+    print("\n" + "="*40)
+    print("Evil Twin Attack")
+    print("="*40)
+    set_monitor_mode(interface)  # from utils.network_utils
+    ssid = input("Enter SSID to clone: ").strip()
+    channel = input("Enter channel number: ").strip()
+    et = EvilTwin(interface, ssid, channel)
     et.prepare()
     print("Starting Evil Twin... Press Ctrl+C to stop.")
     et.start()
     try:
         while True: time.sleep(1)
     except KeyboardInterrupt:
-        print("Stopping Evil Twin...")
+        print("\nStopping Evil Twin...")
         et.stop()
-        set_managed_mode(interface)
+        set_managed_mode(interface)  # restore to managed mode
 
 if __name__ == "__main__":
     print(banner("AirStrike"))
