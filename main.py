@@ -31,8 +31,7 @@ def main_menu():
         elif choice == "2":
             cracker_menu()
         elif choice == "3":
-            print("Evil Twin Attack is not implemented yet.")
-            #evil_twin_menu()  # Uncomment when implemented
+            evil_twin_menu()  
         elif choice == "0":
             print("Exiting...")
             break
