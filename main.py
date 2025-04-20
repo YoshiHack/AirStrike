@@ -7,7 +7,7 @@ from utils.banner import banner, team
 from utils.network_utils import set_managed_mode, set_monitor_mode, run_scan, display_and_choose_ap
 from attacks.deauth_attack import deauth_worker
 from attacks.capture_attack import capture_worker
-from attacks.evil_twin import EvilTwin
+#from attacks.evil_twin import EvilTwin
 
 # Global configuration
 interface = "wlan0"
