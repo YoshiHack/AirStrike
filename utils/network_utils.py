@@ -214,9 +214,10 @@ if __name__ == "__main__":
     # --- End Configuration ---
 
     # 1. Scan for Networks
-    banner("AirStrike")
+    #banner("AirStrike")
 
     available_aps = run_scan(wireless_interface)
+    print(available_aps)
 
     # 2. Let the user choose
     chosen_bssid = None
