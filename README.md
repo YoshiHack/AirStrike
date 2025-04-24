@@ -32,7 +32,12 @@ AirStrike is a modular, Python-based WiFi hacking framework developed as a gradu
    - Validate captured handshakes using `tshark`.
    - Crack the handshake offline with `aircrack-ng` and a provided wordlist.
 
-> Other modules (`evil_twin.py`, `mitm.py`) are scaffolded for future expansion.
+3. **Evil Twin Attack** (`evil_twin.py`)
+
+   - Set up a rogue access point with the same SSID and channel as the target.
+   - Respond to client connection attempts and enable redirection/sniffing potential.
+
+> Other modules (`mitm.py`) are scaffolded for future expansion.
 
 ---
 
@@ -127,6 +132,18 @@ AirStrike is a modular, Python-based WiFi hacking framework developed as a gradu
    - Captured handshake is validated (`tshark`).
    - If valid, launch `aircrack-ng` with the default wordlist (`/usr/share/wordlists/rockyou.txt`).
    - Cracking results (found password or failure) are printed on screen.
+
+5. **Evil Twin Attack**
+
+   - Choose option `3`.
+   - Clone a legitimate access point by entering the SSID and channel.
+   - AirStrike sets up a fake AP using hostapd and dnsmasq, and optionally runs dnsspoof for DNS redirection.
+   - Great for simulating rogue AP attacks or testing captive portals.
+
+6. **MITM Attack** *(Planned)*
+
+   - Will simulate classic man-in-the-middle scenarios such as ARP poisoning, SSL stripping, and credential interception.
+   - Currently under development and will be available in future versions.
 
 ---
 
