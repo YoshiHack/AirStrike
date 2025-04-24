@@ -113,7 +113,9 @@ AirStrike is a modular, Python-based WiFi hacking framework developed as a gradu
    ========================================
    1. Deauth Attack
    2. Handshake Cracker
-   3. Exit
+   3. Evil Twin Attack
+   4. MITM Attack (Coming Soon)
+   0. Exit
    ```
 
 3. **Deauthentication Attack**
