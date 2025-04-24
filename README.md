@@ -49,6 +49,8 @@ AirStrike is a modular, Python-based WiFi hacking framework developed as a gradu
 │   ├── banner.py              # ASCII art and team banner
 │   └── network_utils.py       # Scanning, mode-switching, and AP selection helpers
 ├── main.py                    # CLI menu and orchestration
+├── captures                   # Directory for saving handshake
+│   └── 10-A4-DA-1C-00-00      # sub-dir for every AP with its BSSID
 ├── requirements.txt           # Python package dependencies
 └── README.md                  # This documentation
 ```
