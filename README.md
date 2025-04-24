@@ -1,4 +1,3 @@
-```
     _     _        ____   _          _  _
    / \   (_) _ __ / ___| | |_  _ __ (_)| | __  ___ 
   / _ \  | || '__|\___ \ | __|| '__|| || |/ / / _ \
@@ -10,6 +9,7 @@ AirStrike is a modular, Python-based WiFi hacking framework developed as a gradu
 
 - **Deauthentication Attacks**: Force clients to disconnect from their access point.
 - **WPA/WPA2 Handshake Capture & Cracking**: Capture four-way handshakes and attempt to recover the network password using a wordlist.
+- **Evil Twin Attack**: Clone legitimate access points to lure and interact with clients.
 
 > ⚠️ **Warning:** AirStrike is intended for educational and authorized penetration testing only. Unauthorized use against networks you do not own or have permission to test is illegal and unethical.
 
@@ -18,21 +18,11 @@ AirStrike is a modular, Python-based WiFi hacking framework developed as a gradu
 ## Features
 
 1. **Deauthentication Attack** (`deauth_attack.py`)
-
-   - Scan for nearby WiFi networks.
-   - Select an AP by BSSID and channel.
-   - Switch your wireless interface to monitor mode.
-   - Launch a continuous deauth flood targeting all clients or a specific client.
-   - Automatically restore the interface to managed mode when finished.
-
 2. **Handshake Capture & Cracker** (`capture_attack.py` + handshake logic in `main.py`)
-
-   - Scan and select the target AP.
-   - Capture EAPOL (four-way handshake) packets by pairing a deauth flood with a packet capture.
-   - Validate captured handshakes using `tshark`.
-   - Crack the handshake offline with `aircrack-ng` and a provided wordlist.
-
-> Other modules (`evil_twin.py`, `mitm.py`) are scaffolded for future expansion.
+3. **Evil Twin Attack** (`evil_twin.py`)
+4. **MITM Attack** *(Coming Soon)*
+5. **DNS Spoofing** *(Coming Soon)*
+6. **SSL Stripping** *(Coming Soon)*
 
 ---
 
@@ -42,7 +32,7 @@ AirStrike is a modular, Python-based WiFi hacking framework developed as a gradu
 ├── attacks
 │   ├── capture_attack.py      # Worker for capturing WPA handshakes
 │   ├── deauth_attack.py       # Worker for performing deauthentication floods
-│   ├── evil_twin.py           # (Planned) Evil Twin attack module
+│   ├── evil_twin.py           # Evil Twin attack module
 │   ├── mitm.py                # (Planned) Man-in-the-Middle module
 │   └── __init__.py
 ├── utils
@@ -65,72 +55,37 @@ AirStrike is a modular, Python-based WiFi hacking framework developed as a gradu
 
 ## Installation
 
-1. **Clone the repository**
-
-   ```bash
-   git clone https://github.com/yourusername/airstrike.git
-   cd airstrike
-   ```
-
-2. **Install Python dependencies**
-
-   ```bash
-   sudo apt update
-   sudo apt install -y python3-pip aircrack-ng tshark
-   pip3 install -r requirements.txt
-   ```
-
-3. **Set up your wireless interface**
-
-   - Identify your WiFi interface (e.g., `wlan0`):
-     ```bash
-     iwconfig
-     ```
-   - Confirm it supports monitor mode.
-
----
+```bash
+sudo apt update
+sudo apt install -y python3-pip aircrack-ng tshark
+pip3 install -r requirements.txt
+```
 
 ## Usage
 
-1. **Run the main script**
+```bash
+sudo python3 main.py
+```
 
-   ```bash
-   sudo python3 main.py
-   ```
-
-2. **Main Menu**
-
-   ```text
-   ========================================
-   AirStrike - Main Menu
-   ========================================
-   1. Deauth Attack
-   2. Handshake Cracker
-   3. Exit
-   ```
-
-3. **Deauthentication Attack**
-
-   - Choose option `1`.
-   - Scan results display nearby APs: select one by index.
-   - AirStrike switches to monitor mode and locks channel.
-   - Press `Ctrl+C` to stop the attack.
-   - Interface is restored to managed mode and returns to main menu.
-
-4. **Handshake Cracker**
-
-   - Choose option `2`.
-   - Select the target AP.
-   - If no previous capture, AirStrike starts a capture thread and deauth flood concurrently.
-   - Captured handshake is validated (`tshark`).
-   - If valid, launch `aircrack-ng` with the default wordlist (`/usr/share/wordlists/rockyou.txt`).
-   - Cracking results (found password or failure) are printed on screen.
+### Main Menu:
+```
+========================================
+AirStrike - Main Menu
+========================================
+1. Deauth Attack
+2. Handshake Cracker
+3. Evil Twin Attack
+4. MITM Attack (Coming Soon)
+5. DNS Spoofing (Coming Soon)
+6. SSL Stripping (Coming Soon)
+0. Exit
+```
 
 ---
 
 ## Wordlist and Captures
 
-- Default wordlist path: `/usr/share/wordlists/rockyou.txt`. You can modify `wordlist` in `main.py`.
+- Default wordlist path: `/usr/share/wordlists/rockyou.txt`
 - Captured handshakes are stored under:
   ```
   ./captures/<BSSID-MAC>/capture-01.cap
