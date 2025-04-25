@@ -96,6 +96,9 @@ AirStrike is a modular, Python-based WiFi hacking framework developed as a gradu
      iwconfig
      ```
    - Confirm it supports monitor mode.
+     ```bash
+     iw list | grep -A 10 "Supported interface modes"
+     ```
 
 ---
 
