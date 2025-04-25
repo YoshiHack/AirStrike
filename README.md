@@ -10,6 +10,7 @@ AirStrike is a modular, Python-based WiFi hacking framework developed as a gradu
 
 - **Deauthentication Attacks**: Force clients to disconnect from their access point.
 - **WPA/WPA2 Handshake Capture & Cracking**: Capture four-way handshakes and attempt to recover the network password using a wordlist.
+- **Evil Twin Attack**: Clone a legitimate Wi-Fi network to trick users into connecting to a rogue access point, allowing interception of data or further attacks like phishing or DNS spoofing.
 
 > ⚠️ **Warning:** AirStrike is intended for educational and authorized penetration testing only. Unauthorized use against networks you do not own or have permission to test is illegal and unethical.
 
