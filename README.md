@@ -65,7 +65,8 @@ AirStrike is a modular, Python-based WiFi hacking framework developed as a gradu
 
 ## Prerequisites
 
-- **Operating System:** Linux (e.g., Kali, Ubuntu) with wireless NIC supporting monitor mode.
+- **Operating System:** Linux (e.g., Kali, Ubuntu).
+- **Wireless NIC**: A network interface card that supports monitor mode, AP mode, and packet injection
 - **Root Privileges:** Many operations require `sudo` (monitor mode, channel lock).
 - **Installed Tools:**
   - `iwconfig` / `aircrack-ng` suite
