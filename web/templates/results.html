@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+
+{% block title %}AirStrike - Attack Results{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">Attack Results</div>
+    <div class="card-body">
+        <!-- Attack Status -->
+        <div class="card mb-4">
+            <div class="card-header">Status</div>
+            <div class="card-body">
+                <div class="status-container">
+                    <div class="status-indicator">
+                        <span id="attack-status" class="status-stopped">Stopped</span>
+                    </div>
+                    <div class="attack-controls">
+                        <button id="stop-attack-btn" class="btn btn-danger" disabled>Stop Attack</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Progress Bar -->
+        <div class="card mb-4">
+            <div class="card-header">Progress</div>
+            <div class="card-body">
+                <div class="progress-container">
+                    <div class="progress-label">
+                        <span id="attack-progress-text">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="attack-progress-bar" class="progress-bar-fill" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Attack Log -->
+        <div class="card">
+            <div class="card-header">Log</div>
+            <div class="card-body">
+                <div id="attack-log" class="log-container">
+                    <div class="log-entry">Waiting for attack to start or select a running attack...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Start log updates
+        startLogUpdates();
+        
+        // Setup stop attack button
+        const stopAttackBtn = document.getElementById('stop-attack-btn');
+        if (stopAttackBtn) {
+            stopAttackBtn.addEventListener('click', stopAttack);
+        }
+    });
+</script>
+{% endblock %}

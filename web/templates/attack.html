@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block title %}AirStrike - Attack Configuration{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">Attack Configuration</div>
+    <div class="card-body">
+        <!-- Selected Network Information -->
+        <div id="selected-network-info" class="mb-4"></div>
+        
+        <!-- Attack Type Selection -->
+        <div class="card mb-4">
+            <div class="card-header">Select Attack Type</div>
+            <div class="card-body">
+                <div id="attack-options" class="attack-options">
+                    <div class="attack-option" data-attack="deauth">
+                        <h3>Deauthentication</h3>
+                        <p>Force clients to disconnect from the access point</p>
+                    </div>
+                    <div class="attack-option" data-attack="handshake">
+                        <h3>Handshake Capture</h3>
+                        <p>Capture WPA/WPA2 handshakes for password cracking</p>
+                    </div>
+                    <div class="attack-option" data-attack="evil_twin">
+                        <h3>Evil Twin</h3>
+                        <p>Create a fake access point to intercept traffic</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Attack Configuration Options -->
+        <div class="card mb-4">
+            <div class="card-header">Attack Parameters</div>
+            <div class="card-body">
+                <div id="attack-config">
+                    <div class="alert alert-info">Select an attack type to configure parameters</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Attack Controls -->
+        <div class="attack-controls text-center">
+            <button id="start-attack-btn" class="btn btn-danger" disabled>Start Attack</button>
+            <button id="stop-attack-btn" class="btn btn-secondary" disabled>Stop Attack</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Load selected network info
+        loadSelectedNetworkInfo();
+        
+        // Setup attack option selection
+        const attackOptions = document.querySelectorAll('.attack-option');
+        attackOptions.forEach(option => {
+            option.addEventListener('click', function() {
+                // Remove selection from all options
+                attackOptions.forEach(opt => opt.classList.remove('selected'));
+                // Add selection to clicked option
+                this.classList.add('selected');
+                
+                // Show configuration for selected attack
+                const attackType = this.dataset.attack;
+                showAttackConfig(attackType);
+                
+                // Enable start button
+                document.getElementById('start-attack-btn').disabled = false;
+            });
+        });
+        
+        // Setup start attack button
+        document.getElementById('start-attack-btn').addEventListener('click', startAttack);
+        
+        // Setup stop attack button
+        document.getElementById('stop-attack-btn').addEventListener('click', stopAttack);
+    });
+</script>
+{% endblock %}
