@@ -15,7 +15,7 @@
                         <span id="attack-status" class="status-stopped">Stopped</span>
                     </div>
                     <div class="attack-controls">
-                        <button id="stop-attack-btn" class="btn btn-danger" disabled>Stop Attack</button>
+                        <button id="stop-attack-btn" class="btn btn-danger">Stop Attack</button>
                     </div>
                 </div>
             </div>
@@ -54,12 +54,6 @@
     document.addEventListener('DOMContentLoaded', function() {
         // Start log updates
         startLogUpdates();
-        
-        // Setup stop attack button
-        const stopAttackBtn = document.getElementById('stop-attack-btn');
-        if (stopAttackBtn) {
-            stopAttackBtn.addEventListener('click', stopAttack);
-        }
     });
 </script>
 {% endblock %}
