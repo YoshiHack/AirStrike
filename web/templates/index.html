@@ -25,9 +25,9 @@
             <div class="card-header">Quick Actions</div>
             <div class="card-body">
                 <div class="quick-actions">
-                    <a href="{{ url_for('scan') }}" class="btn btn-primary">Scan Networks</a>
-                    <a href="{{ url_for('attack') }}" class="btn btn-danger">Launch Attack</a>
-                    <a href="{{ url_for('results') }}" class="btn btn-info">View Results</a>
+                    <a href="{{ url_for('scan.show_scan') }}" class="btn btn-primary">Scan Networks</a>
+                    <a href="{{ url_for('attacks.show_attack') }}" class="btn btn-danger">Launch Attack</a>
+                    <a href="{{ url_for('results.show_results') }}" class="btn btn-info">View Results</a>
                 </div>
             </div>
         </div>
