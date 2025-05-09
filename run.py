@@ -16,5 +16,5 @@ if __name__ == '__main__':
     from web.shared import config
     os.makedirs(config['output_dir'], exist_ok=True)
     
-    # Run the Flask app
+    # Run the Flask app 
     app.run(debug=True, host='0.0.0.0', port=5000) 

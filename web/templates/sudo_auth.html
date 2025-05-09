@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Sudo Authentication - AirStrike{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">Sudo Authentication Required</div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            <h4>Administrator Privileges Required</h4>
+            <p>AirStrike needs administrator (sudo) privileges to perform WiFi operations like scanning networks and changing interface modes.</p>
+            <p>Please enter your sudo password to continue. This password will be securely stored in memory for this session only.</p>
+        </div>
+        
+        {% if error %}
+        <div class="alert alert-danger">
+            <strong>Error:</strong> {{ error }}
+        </div>
+        {% endif %}
+        
+        <form method="POST" action="{{ url_for('settings.sudo_auth', next=next) }}" id="sudo-auth-form">
+            <div class="form-group">
+                <label for="sudo-password">Sudo Password:</label>
+                <input type="password" id="sudo-password" name="password" class="form-control" required>
+            </div>
+            <div class="form-group mt-3">
+                <button type="submit" class="btn btn-primary" id="sudo-submit-btn">Authenticate</button>
+                <a href="{{ next }}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+        
+        <div class="mt-4">
+            <h5>Why does AirStrike need sudo privileges?</h5>
+            <p>WiFi operations like changing network interface modes and scanning for networks require administrator privileges on Linux systems. AirStrike uses these privileges only for the specific operations that require them.</p>
+        </div>
+    </div>
+</div>
+{% endblock %} 

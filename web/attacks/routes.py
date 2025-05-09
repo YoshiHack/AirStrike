@@ -1,4 +1,8 @@
-from flask import Blueprint, jsonify, request, render_template
+"""
+Routes for attack functionality in the AirStrike web interface.
+"""
+
+from flask import Blueprint, jsonify, request, render_template, redirect, url_for
 import threading
 import os
 import sys
@@ -7,30 +11,73 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 # Import shared variables and helpers
-from web.shared import *
-from web.attacks.helpers import *
+from web.shared import attack_state, stats, config, logger, log_message, reset_attack_state
+from web.attacks.helpers import (launch_deauth_attack, launch_handshake_attack, 
+                               launch_evil_twin_attack, update_attack_progress, add_log_message)
+from utils.network_utils import set_managed_mode
+from web.socket_io import socketio
 
 attacks_bp = Blueprint('attacks', __name__)
 
 @attacks_bp.route('/attack')
 def show_attack():
+    """Render the attack configuration page"""
+    # Check if sudo is configured before rendering the page
+    if not config.get('sudo_configured', False):
+        # Redirect directly to sudo auth page
+        return redirect(url_for('settings.sudo_auth', next=url_for('attacks.show_attack')))
+    
+    # If sudo is configured, render the attack page
     return render_template('attack.html')
+
 @attacks_bp.route('/start_attack', methods=['POST'])
 def start_attack():
-    global attack_state
+    """
+    Start an attack based on the provided parameters.
+    
+    Expected JSON payload:
+    {
+        "network": {
+            "bssid": "00:11:22:33:44:55",
+            "essid": "NetworkName",
+            "channel": "6"
+        },
+        "attack_type": "deauth|handshake|evil_twin",
+        "config": {
+            // Attack-specific configuration
+        }
+    }
+    """
+    # Check if sudo is configured
+    if not config.get('sudo_configured', False):
+        return jsonify({
+            'success': False, 
+            'error': 'sudo_auth_required',
+            'redirect': url_for('settings.sudo_auth', next=request.referrer or url_for('attacks.show_attack'))
+        }), 401
     
     # Check if an attack is already running
     if attack_state['running']:
         return jsonify({'success': False, 'error': 'An attack is already running'})
     
+    # Validate request data
     data = request.json
-    if not data or 'network' not in data or 'attack_type' not in data:
+    if not data:
+        return jsonify({'success': False, 'error': 'No data provided'})
+    
+    if 'network' not in data or 'attack_type' not in data:
         return jsonify({'success': False, 'error': 'Missing required parameters'})
     
     # Get attack parameters
     network = data['network']
     attack_type = data['attack_type']
     attack_config = data.get('config', {})
+    
+    # Validate network data
+    required_network_fields = ['bssid', 'essid', 'channel']
+    for field in required_network_fields:
+        if field not in network:
+            return jsonify({'success': False, 'error': f'Missing required network field: {field}'})
     
     # Initialize attack state
     attack_state['running'] = True
@@ -44,6 +91,12 @@ def start_attack():
     # Log the start of the attack
     log_message(f"Starting {attack_type} attack on {network['essid']} ({network['bssid']})")
     
+    # Emit attack started event via WebSocket
+    socketio.emit('attack_started', {
+        'attack_type': attack_type,
+        'target_network': network
+    })
+    
     try:
         # Launch the appropriate attack
         if attack_type == 'deauth':
@@ -53,7 +106,8 @@ def start_attack():
         elif attack_type == 'evil_twin':
             launch_evil_twin_attack(network, attack_config)
         else:
-            attack_state['running'] = False
+            reset_attack_state()
+            socketio.emit('attack_error', {'error': f'Unknown attack type: {attack_type}'})
             return jsonify({'success': False, 'error': f'Unknown attack type: {attack_type}'})
         
         # Update stats
@@ -61,13 +115,33 @@ def start_attack():
         
         return jsonify({'success': True})
     except Exception as e:
-        attack_state['running'] = False
-        attacks_bp.logger.error(f"Error starting attack: {e}")
+        reset_attack_state()
+        
+        # Check if the error is related to sudo
+        error_str = str(e)
+        if "sudo" in error_str.lower() or "permission" in error_str.lower():
+            config['sudo_configured'] = False
+            socketio.emit('attack_error', {'error': 'Administrator privileges required'})
+            return jsonify({
+                'success': False, 
+                'error': 'sudo_auth_required',
+                'redirect': url_for('settings.sudo_auth', next=request.referrer or url_for('attacks.show_attack'))
+            }), 401
+        
+        logger.error(f"Error starting attack: {e}")
+        socketio.emit('attack_error', {'error': str(e)})
         return jsonify({'success': False, 'error': str(e)})
 
 @attacks_bp.route('/stop_attack', methods=['POST'])
 def stop_attack():
-    global attack_state
+    """Stop the currently running attack"""
+    # Check if sudo is configured for stopping the attack
+    if not config.get('sudo_configured', False):
+        return jsonify({
+            'success': False, 
+            'error': 'sudo_auth_required',
+            'redirect': url_for('settings.sudo_auth', next=request.referrer or url_for('attacks.show_attack'))
+        }), 401
     
     if not attack_state['running']:
         return jsonify({'success': False, 'error': 'No attack is running'})
@@ -79,22 +153,37 @@ def stop_attack():
         
         # Wait for threads to finish
         for thread in attack_state['threads']:
-            thread.join(timeout=2)
+            if thread and thread.is_alive():
+                thread.join(timeout=2)
         
         # Reset interface to managed mode
-        set_managed_mode(config['interface'])
+        success = set_managed_mode(config['interface'])
+        if not success and not config.get('sudo_configured', False):
+            # If setting managed mode failed due to sudo, redirect to auth
+            return jsonify({
+                'success': False, 
+                'error': 'sudo_auth_required',
+                'redirect': url_for('settings.sudo_auth', next=request.referrer or url_for('attacks.show_attack'))
+            }), 401
         
         # Update attack state
-        attack_state['running'] = False
         log_message("Attack stopped")
+        reset_attack_state()
+        
+        # Emit attack stopped event via WebSocket
+        socketio.emit('attack_stopped')
         
         return jsonify({'success': True})
     except Exception as e:
-        attacks_bp.logger.error(f"Error stopping attack: {e}")
+        logger.error(f"Error stopping attack: {e}")
+        # Still try to reset the attack state even if there was an error
+        reset_attack_state()
+        socketio.emit('attack_error', {'error': str(e)})
         return jsonify({'success': False, 'error': str(e)})
 
 @attacks_bp.route('/attack_status')
 def attack_status():
+    """Get the current status of the attack"""
     return jsonify({
         'running': attack_state['running'],
         'attack_type': attack_state['attack_type'],
@@ -104,6 +193,7 @@ def attack_status():
 
 @attacks_bp.route('/attack_log')
 def attack_log():
+    """Get the log messages from the current attack"""
     return jsonify({
         'log': attack_state['log']
     })

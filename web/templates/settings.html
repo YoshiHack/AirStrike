@@ -6,6 +6,26 @@
 <div class="card">
     <div class="card-header">Settings</div>
     <div class="card-body">
+        <!-- Sudo Configuration Status -->
+        <div class="card mb-4">
+            <div class="card-header">Administrator Privileges</div>
+            <div class="card-body">
+                {% if sudo_configured %}
+                <div class="alert alert-success">
+                    <strong>Administrator privileges configured</strong>
+                    <p>AirStrike has the necessary privileges to perform WiFi operations.</p>
+                </div>
+                {% else %}
+                <div class="alert alert-warning">
+                    <strong>Administrator privileges required</strong>
+                    <p>AirStrike needs administrator (sudo) privileges to perform WiFi operations like scanning networks and changing interface modes.</p>
+                    <a href="{{ url_for('settings.sudo_auth', next=request.path) }}" class="btn btn-primary mt-2">Configure Sudo Authentication</a>
+                </div>
+                {% endif %}
+                <p class="mt-3">WiFi operations like changing network interface modes and scanning for networks require administrator privileges on Linux systems. AirStrike stores your sudo password securely in memory for the duration of this session only.</p>
+            </div>
+        </div>
+        
         <!-- Interface Selection -->
         <div class="card mb-4">
             <div class="card-header">Wireless Interface</div>
@@ -46,6 +66,15 @@
                     <small class="form-text text-muted">Directory where captures and logs will be saved.</small>
                 </div>
                 <button id="save-output-dir-btn" class="btn btn-primary mt-2">Save Directory</button>
+            </div>
+        </div>
+        
+        <!-- Link to Diagnostics -->
+        <div class="card mb-4">
+            <div class="card-header">Network Diagnostics</div>
+            <div class="card-body">
+                <p>Use the diagnostics page to troubleshoot WiFi scanning and interface issues.</p>
+                <a href="{{ url_for('diagnostics.show_diagnostics') }}" class="btn btn-info">Go to Diagnostics</a>
             </div>
         </div>
         
@@ -182,6 +211,53 @@
             console.error('Error saving output directory:', error);
             showAlert('Error saving output directory', 'danger');
         });
+    }
+    
+    // Set interface function
+    function setInterface(interfaceName) {
+        fetch('/set_interface', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                interface: interfaceName
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(`Interface changed to ${interfaceName}`, 'success');
+            } else {
+                showAlert(`Failed to change interface: ${data.error}`, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error changing interface:', error);
+            showAlert('Error changing interface', 'danger');
+        });
+    }
+    
+    // Helper function to show alerts
+    function showAlert(message, type) {
+        const alertsContainer = document.getElementById('alerts-container');
+        if (alertsContainer) {
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type} alert-dismissible fade show`;
+            alert.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            alertsContainer.appendChild(alert);
+            
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                alert.classList.remove('show');
+                setTimeout(() => {
+                    alertsContainer.removeChild(alert);
+                }, 150);
+            }, 5000);
+        }
     }
 </script>
 {% endblock %}
