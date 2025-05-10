@@ -23,9 +23,11 @@ def main_menu():
         print("2. Handshake Cracker")
         print("3. Evil Twin Attack")
         print("4. MITM Attack (Coming Soon)")
+        print("5. DNS Spoofing (Coming Soon)")
+        print("6. SSL Stripping (Coming Soon)")
         print("0. Exit")
         
-        choice = input("\nSelect an option (0-4): ").strip()
+        choice = input("\nSelect an option (0-6): ").strip()
         
         if choice == "1":
             deauth_menu()
@@ -33,8 +35,8 @@ def main_menu():
             cracker_menu()
         elif choice == "3":
             evil_twin_menu()
-        elif choice == "4":
-            print("MITM Attack is coming soon!")
+        elif choice in ["4", "5", "6"]:
+            print("\n[!] This feature is under development. Coming soon...")
         elif choice == "0":
             print("Exiting...")
             break
