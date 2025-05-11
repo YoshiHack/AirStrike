@@ -8,7 +8,7 @@ import time
 import re
 from web.shared import stats, logger, config, run_with_sudo
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 from utils.network_utils import run_scan
 
 def check_interface_status(interface='wlan0'):

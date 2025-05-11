@@ -8,7 +8,7 @@ import sys
 import threading
 
 # Add the project root directory to Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 
 from web.shared import config, logger, log_message
 from utils.network_utils import set_monitor_mode, set_managed_mode
