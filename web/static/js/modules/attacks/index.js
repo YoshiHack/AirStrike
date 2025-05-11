@@ -133,7 +133,6 @@ export async function stopAttack() {
         
         if (result.success) {
             setAttackRunning(false);
-            showAlert('Attack stopped successfully', 'success');
             updateAttackStatus(false);
         } else {
             showAlert(`Failed to stop attack: ${result.error}`, 'danger');

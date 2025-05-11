@@ -200,6 +200,7 @@ body {
 
 .btn-success:hover {
     background-color: var(--accent-secondary);
+    color: var(--btn-primary-text);
     filter: brightness(1.1);
 }
 
