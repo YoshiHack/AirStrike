@@ -137,5 +137,34 @@ def run_with_sudo(command, password=None):
     except Exception as e:
         logger.error(f"Error running command with sudo: {e}")
         return False, "", str(e)
+
+def is_running_as_root():
+    """
+    Returns True if the current process is running as root (UID 0).
+    """
+    try:
+        return os.geteuid() == 0
+    except AttributeError:
+        # Windows compatibility (no geteuid)
+        return False
+
+def can_run_sudo_without_password():
+    """
+    Returns True if the current user can run sudo without a password (NOPASSWD sudoers).
+    """
+    try:
+        result = subprocess.run(['sudo', '-n', 'id', '-u'], capture_output=True, text=True)
+        return result.returncode == 0 and result.stdout.strip() == '0'
+    except Exception:
+        return False
+
+def is_sudo_authenticated():
+    """
+    Returns True if the user is authenticated for sudo (either running as root, sudo_configured is True, or can run sudo without password).
+    """
+    if is_running_as_root() or can_run_sudo_without_password():
+        config['sudo_configured'] = True
+        return True
+    return config.get('sudo_configured', False)
     
     

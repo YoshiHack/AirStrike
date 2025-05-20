@@ -15,6 +15,10 @@ try:
     from web import create_app
     app = create_app()
 
+    # Ensure sudo status is up to date at startup
+    from web.shared import is_sudo_authenticated
+    is_sudo_authenticated()
+
     # Import and initialize SocketIO
     from web.socket_io import socketio, init_socketio
     init_socketio(app)

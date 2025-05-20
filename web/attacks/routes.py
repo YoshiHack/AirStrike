@@ -11,7 +11,7 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 
 # Import shared variables and helpers
-from web.shared import attack_state, stats, config, logger, log_message, reset_attack_state
+from web.shared import attack_state, stats, config, logger, log_message, reset_attack_state, is_sudo_authenticated
 from web.attacks.helpers import (launch_deauth_attack, launch_handshake_attack, 
                                launch_evil_twin_attack, update_attack_progress, add_log_message)
 from utils.network_utils import set_managed_mode
@@ -22,12 +22,12 @@ attacks_bp = Blueprint('attacks', __name__)
 @attacks_bp.route('/attack')
 def show_attack():
     """Render the attack configuration page"""
-    # Check if sudo is configured before rendering the page
-    if not config.get('sudo_configured', False):
+    # Check if sudo is authenticated before rendering the page
+    if not is_sudo_authenticated():
         # Redirect directly to sudo auth page
         return redirect(url_for('settings.sudo_auth', next=url_for('attacks.show_attack')))
     
-    # If sudo is configured, render the attack page
+    # If sudo is authenticated, render the attack page
     return render_template('attack.html')
 
 @attacks_bp.route('/start_attack', methods=['POST'])
@@ -48,8 +48,8 @@ def start_attack():
         }
     }
     """
-    # Check if sudo is configured
-    if not config.get('sudo_configured', False):
+    # Check if sudo is authenticated
+    if not is_sudo_authenticated():
         return jsonify({
             'success': False, 
             'error': 'sudo_auth_required',
@@ -135,8 +135,8 @@ def start_attack():
 @attacks_bp.route('/stop_attack', methods=['POST'])
 def stop_attack():
     """Stop the currently running attack"""
-    # Check if sudo is configured for stopping the attack
-    if not config.get('sudo_configured', False):
+    # Check if sudo is authenticated for stopping the attack
+    if not is_sudo_authenticated():
         return jsonify({
             'success': False, 
             'error': 'sudo_auth_required',

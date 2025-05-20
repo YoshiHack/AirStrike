@@ -65,6 +65,13 @@ def sudo_auth():
     """Handle sudo password authentication"""
     error = None
     
+    # If running as root, skip authentication
+    if is_running_as_root():
+        config['sudo_configured'] = True
+        flash('Running as root. Sudo authentication not required.', 'success')
+        redirect_to = request.args.get('next', url_for('settings.show_settings'))
+        return redirect(redirect_to)
+    
     if request.method == 'POST':
         password = request.form.get('password')
         if not password:

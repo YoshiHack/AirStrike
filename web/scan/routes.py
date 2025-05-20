@@ -9,7 +9,7 @@ import sys
 # Add the project root directory to Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-from web.shared import logger, config
+from web.shared import logger, config, is_sudo_authenticated
 from .helpers import scan_wifi_networks, check_interface_status
 
 scan_bp = Blueprint('scan', __name__)
@@ -17,12 +17,12 @@ scan_bp = Blueprint('scan', __name__)
 @scan_bp.route('/scan')
 def show_scan():
     """Render the network scanning page"""
-    # Check if sudo is configured before rendering the page
-    if not config.get('sudo_configured', False):
+    # Check if sudo is authenticated before rendering the page
+    if not is_sudo_authenticated():
         # Redirect directly to sudo auth page
         return redirect(url_for('settings.sudo_auth', next=url_for('scan.show_scan')))
     
-    # If sudo is configured, render the scan page
+    # If sudo is authenticated, render the scan page
     return render_template('scan.html')
 
 @scan_bp.route('/scan_wifi')
@@ -33,8 +33,8 @@ def scan_wifi():
     Returns:
         JSON array of networks or empty array with 500 status on error
     """
-    # Check if sudo is configured
-    if not config.get('sudo_configured', False):
+    # Check if sudo is authenticated
+    if not is_sudo_authenticated():
         # Return a special response that will trigger the frontend to redirect
         return jsonify({
             'success': False, 

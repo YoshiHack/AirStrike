@@ -38,10 +38,10 @@ function animateProgress() {
     
     const steps = [
         { progress: 15, text: 'Loading resources...' },
-        { progress: 35, text: 'Initializing components...' },
-        { progress: 65, text: 'Preparing interface...' },
-        { progress: 85, text: 'Almost ready...' },
-        { progress: 100, text: 'Complete!' }
+        { progress: 35, text: 'Loading resources...' },
+        { progress: 65, text: 'Loading resources...' },
+        { progress: 85, text: 'Loading resources...' },
+        { progress: 100, text: 'Loading resources...' }
     ];
     
     let currentStep = 0;
@@ -56,7 +56,7 @@ function animateProgress() {
         currentStep++;
         
         if (currentStep < steps.length) {
-            const delay = 300 + Math.random() * 300;
+            const delay = 10 + Math.random() * 5;
             setTimeout(updateProgress, delay);
         }
     }
@@ -87,8 +87,8 @@ function setupPageTransitions() {
                     loadingOverlay.classList.add('hidden');
                     loadingOverlay.style.visibility = 'hidden';
                     loadingOverlay.style.pointerEvents = 'none';
-                }, 800);
+                }, 10);
             }
-        }, 200);
+        }, 10);
     });
 }
