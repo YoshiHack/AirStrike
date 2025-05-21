@@ -388,6 +388,7 @@ label {
 /* Attack configuration styles */
 .attack-options {
     display: flex;
+    flex-direction: column;
     gap: 15px;
     margin-bottom: 20px;
 }
@@ -402,12 +403,25 @@ label {
     transition: all 0.2s;
     background-color: var(--card-bg);
     color: var(--text-primary);
+    margin: 0 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    position: relative;
+    z-index: 1;
+}
+
+.attack-option:first-child {
+    margin-left: 0;
+}
+
+.attack-option:last-child {
+    margin-right: 0;
 }
 
 .attack-option:hover {
     border-color: var(--accent-primary);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 255, 65, 0.15);
+    background-color: rgba(0,255,65,0.07);
+    box-shadow: 0 4px 16px rgba(0,255,65,0.12);
+    z-index: 2;
 }
 
 .attack-option.selected {
@@ -677,4 +691,29 @@ label {
 .nav-item.active::after {
     width: 100%;
     left: 0;
+}
+
+/* No unique styles needed for new attack options as they use the existing .attack-option class. */
+
+/* Responsive attack options row layout */
+.attack-options-row {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+.attack-options-row .attack-option {
+    flex: 1 1 0;
+}
+
+/* If a row has only one option, center it */
+.attack-options-row:only-child, .attack-options-row:last-child:only-child, .attack-options-row:last-child {
+    justify-content: flex-start;
+}
+
+@media (max-width: 768px) {
+    .attack-options-row {
+        flex-direction: column;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
 }
