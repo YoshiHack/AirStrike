@@ -7,37 +7,17 @@ This module provides the SocketIO instance used for real-time communication.
 from flask_socketio import SocketIO
 import logging
 import sys
+import os
 
 # Configure basic logging if not already configured
-logging.basicConfig(level=logging.INFO, 
+logging.basicConfig(level=logging.DEBUG, 
                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                    stream=sys.stdout)
 
-# Create SocketIO instance with error handling
-try:
-    # Initialize with async_mode='threading' for better compatibility
-    socketio = SocketIO(cors_allowed_origins="*", async_mode='threading', logger=True, engineio_logger=True)
-    logging.info("SocketIO initialized successfully with threading mode")
-except Exception as e:
-    logging.error(f"Error initializing SocketIO: {e}")
-    # Fallback to a basic instance
-    try:
-        socketio = SocketIO()
-        logging.info("SocketIO initialized with default settings")
-    except Exception as e:
-        logging.error(f"Critical error initializing SocketIO: {e}")
-        # Create a dummy socketio object that won't crash the app
-        class DummySocketIO:
-            def init_app(self, app): pass
-            def run(self, app, **kwargs): 
-                from flask import Flask
-                if isinstance(app, Flask):
-                    return app.run(**kwargs)
-            def on(self, event): return lambda f: f
-            def emit(self, event, data=None): pass
-        
-        socketio = DummySocketIO()
-        logging.warning("Using dummy SocketIO implementation due to initialization errors")
+# Create SocketIO instance with simpler configuration
+socketio = SocketIO(cors_allowed_origins="*", logger=True, engineio_logger=True)
+logger = logging.getLogger('socketio')
+logger.setLevel(logging.DEBUG)
 
 def init_socketio(app):
     """
@@ -47,6 +27,7 @@ def init_socketio(app):
         app: The Flask application instance
     """
     try:
+        # Make sure app is properly passed to SocketIO
         socketio.init_app(app)
         logging.info(f"SocketIO initialized with app {app.name}")
         
@@ -62,11 +43,27 @@ def init_socketio(app):
             from web.shared import logger
             logger.info('Client disconnected')
             
+        @socketio.on('attack_status_request')
+        def handle_attack_status_request():
+            from web.shared import logger, attack_state
+            logger.info('Received attack status request')
+            socketio.emit('attack_status', {
+                'running': attack_state['running'],
+                'attack_type': attack_state['attack_type'],
+                'progress': attack_state['progress']
+            })
+            
         @socketio.on_error()
         def handle_error(e):
             from web.shared import logger
             logger.error(f"SocketIO error: {e}")
             
+        # Test emit to ensure socket is working
+        socketio.emit('server_startup', {'status': 'ready'})
+        logging.info("SocketIO test emit sent")
+        
+        return True
+        
     except Exception as e:
-        from web.shared import logger
-        logger.error(f"Error initializing SocketIO events: {e}") 
+        logging.error(f"Error initializing SocketIO events: {e}")
+        return False 

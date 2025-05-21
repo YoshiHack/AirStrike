@@ -1,6 +1,8 @@
 from flask import Blueprint, render_template, jsonify
-from shared import *
+from web.shared import stats
+
 main = Blueprint('main', __name__)
+
 # Routes
 @main.route('/')
 def index():

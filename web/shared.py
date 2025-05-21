@@ -10,7 +10,7 @@ import logging
 import threading
 import subprocess
 import os
-from flask import Blueprint
+from flask import Blueprint, request
 
 # Set up logging
 logger = logging.getLogger('airstrike')
@@ -20,6 +20,34 @@ handler.setFormatter(logging.Formatter(
 ))
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
+
+def init_logging(app):
+    """
+    Initialize logging for the Flask application.
+    
+    Args:
+        app: The Flask application instance
+    """
+    # Set up Flask app to use our logger
+    app.logger.handlers = []
+    for handler in logger.handlers:
+        app.logger.addHandler(handler)
+    app.logger.setLevel(logger.level)
+    
+    # Enable more verbose logging
+    if os.environ.get('AIRSTRIKE_DEBUG'):
+        logger.setLevel(logging.DEBUG)
+        app.logger.setLevel(logging.DEBUG)
+        logging.getLogger('socketio').setLevel(logging.DEBUG)
+        logging.getLogger('engineio').setLevel(logging.DEBUG)
+        logging.getLogger('werkzeug').setLevel(logging.DEBUG)
+    
+    # Create a request logger
+    @app.before_request
+    def log_request_info():
+        logger.debug(f'Request: {request.method} {request.path}')
+
+    return True
 
 # Create Blueprint for shared routes
 shared = Blueprint('shared', __name__)
@@ -50,6 +78,9 @@ stats = {
     'attacks_count': 0,
     'captures_count': 0
 }
+
+# Initialize stop event
+attack_state['stop_event'] = threading.Event()
 
 def log_message(message):
     """

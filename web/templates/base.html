@@ -79,7 +79,7 @@
         </header>
         
         <nav class="nav">
-            <a href="{{ url_for('index') }}" class="nav-item {% if request.endpoint == 'index' %}active{% endif %}">Dashboard</a>
+            <a href="{{ url_for('main.index') }}" class="nav-item {% if request.endpoint == 'main.index' %}active{% endif %}">Dashboard</a>
             <a href="{{ url_for('scan.show_scan') }}" class="nav-item {% if request.endpoint == 'scan.show_scan' %}active{% endif %}">Scan Networks</a>
             <a href="{{ url_for('attacks.show_attack') }}" class="nav-item {% if request.endpoint == 'attacks.show_attack' %}active{% endif %}">Attack</a>
             <a href="{{ url_for('results.show_results') }}" class="nav-item {% if request.endpoint == 'results.show_results' %}active{% endif %}">Results</a>

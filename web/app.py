@@ -1,70 +1,68 @@
-from flask import Flask, render_template, jsonify, request
+"""
+Flask app for AirStrike web interface.
+"""
+
+from flask import Flask, render_template, request, jsonify
 import os
 import sys
 import logging
-import traceback
 
 # Add the project root directory to Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import shared variables
-from web.shared import config, stats, logger
+from web.shared import config, logger, init_logging
+from web.socket_io import socketio, init_socketio
 
-try:
-    # Create Flask app
-    from web import create_app
-    app = create_app()
+# Initialize Flask app
+app = Flask(__name__)
+app.config['SECRET_KEY'] = os.urandom(24)
+app.debug = False  # Disable debug mode for production use
 
-    # Ensure sudo status is up to date at startup
-    from web.shared import is_sudo_authenticated
-    is_sudo_authenticated()
+# Initialize logging
+init_logging(app)
+logger.info("Starting AirStrike web interface")
 
-    # Import and initialize SocketIO
-    from web.socket_io import socketio, init_socketio
-    init_socketio(app)
-
-    # Set up Flask logger to use our custom logger
-    app.logger.handlers = []
-    for handler in logger.handlers:
-        app.logger.addHandler(handler)
-    app.logger.setLevel(logger.level)
+# Initialize SocketIO with the Flask app
+socketio_ready = init_socketio(app)
+if not socketio_ready:
+    logger.critical("SocketIO failed to initialize properly. Real-time updates will not work.")
     
-    # Register error handlers
-    @app.errorhandler(404)
-    def page_not_found(e):
-        logger.warning(f"404 error: {request.path}")
-        return render_template('error.html', error="Page not found"), 404
+# Register blueprints after socketio initialization
+from web.scan.routes import scan_bp
+from web.attacks.routes import attacks_bp
+from web.settings.routes import settings_bp
+from web.results.routes import results_bp
+from web.diagnostics.routes import diagnostics_bp
+from web.main.routes import main as main_bp
 
-    @app.errorhandler(500)
-    def server_error(e):
-        logger.error(f"500 error: {str(e)}")
-        return render_template('error.html', error="Internal server error"), 500
+app.register_blueprint(main_bp)
+app.register_blueprint(scan_bp)
+app.register_blueprint(attacks_bp)
+app.register_blueprint(settings_bp)
+app.register_blueprint(results_bp)
+app.register_blueprint(diagnostics_bp)
 
-    # Routes
-    @app.route('/')
-    def index():
-        return render_template('index.html', sudo_configured=config.get('sudo_configured', False))
+# Root route is already handled by main_bp
+# Just add error handlers
 
-    @app.route('/dashboard_stats')
-    def dashboard_stats():
-        return jsonify(stats)
+# Error handlers
+@app.errorhandler(404)
+def page_not_found(e):
+    """Handle 404 errors."""
+    logger.warning(f"404 error: {request.path}")
+    return render_template('error.html', error=f"Page {request.path} not found"), 404
 
-except Exception as e:
-    logger.error(f"Error initializing application: {e}")
-    logger.error(traceback.format_exc())
-    raise
+@app.errorhandler(500)
+def internal_server_error(e):
+    """Handle 500 errors."""
+    logger.error(f"500 error: {str(e)}")
+    return render_template('error.html', error=str(e)), 500
 
-# Run the application
+# This allows the app to be run using "python app.py" instead of the Flask development server
+# when run directly (but not when imported by run.py)
 if __name__ == '__main__':
-    try:
-        # Create output directory if it doesn't exist
-        os.makedirs(config['output_dir'], exist_ok=True)
-        
-        # Log application startup
-        logger.info(f"Starting AirStrike web interface on port 5001")
-        
-        # Run the Flask app with SocketIO
-        socketio.run(app, debug=False, host='0.0.0.0', port=5001)
-    except Exception as e:
-        logger.error(f"Error starting application: {e}")
-        logger.error(traceback.format_exc())
+    # Create output directory if it doesn't exist
+    os.makedirs(config['output_dir'], exist_ok=True)
+    
+    # Use socketio.run instead of app.run for Socket.IO to work properly
+    socketio.run(app, debug=False, host='0.0.0.0', port=5000)

@@ -12,7 +12,7 @@
             <p>AirStrike needs administrator (sudo) privileges to perform WiFi operations like scanning networks and changing interface modes.</p>
             <hr>
             <p class="mb-0">
-                <a href="{{ url_for('settings.sudo_auth', next=url_for('index')) }}" class="btn btn-warning">Configure Authentication</a>
+                <a href="{{ url_for('settings.sudo_auth', next=url_for('main.index')) }}" class="btn btn-warning">Configure Authentication</a>
             </p>
         </div>
         {% endif %}

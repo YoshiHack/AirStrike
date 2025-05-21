@@ -434,7 +434,7 @@ label {
     color: var(--accent-primary);
 }
 
-/* Results page styles */
+/* Progress bar styles - currently not used in results page but kept for potential future use */
 .progress-container {
     margin: 20px 0;
 }

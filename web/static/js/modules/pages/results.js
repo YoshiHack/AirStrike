@@ -5,8 +5,8 @@
 import { startAttackMonitoring, stopAttack } from '../attacks/index.js';
 import { socket } from '../api.js';
 import { showAlert } from '../ui.js';
-import { updateAttackStatus, updateAttackProgress, updateAttackLog } from '../ui.js';
-import { setAttackRunning, updateAttackProgress as updateStateProgress, updateAttackLog as updateStateLog } from '../state.js';
+import { updateAttackStatus, updateAttackLog } from '../ui.js';
+import { setAttackRunning, updateAttackLog as updateStateLog } from '../state.js';
 
 /**
  * Initialize results page
@@ -34,13 +34,6 @@ export function initResultsPage() {
  * Set up WebSocket event listeners for real-time updates
  */
 function setupWebSocketListeners() {
-    // Listen for attack progress updates
-    socket.on('attack_progress', (data) => {
-        console.log('Received attack progress update:', data);
-        updateStateProgress(data.progress);
-        updateAttackProgress(data.progress);
-    });
-    
     // Listen for attack log updates
     socket.on('attack_log', (data) => {
         console.log('Received attack log update:', data);

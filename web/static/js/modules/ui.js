@@ -53,26 +53,6 @@ export function updateAttackStatus(isRunning) {
 }
 
 /**
- * Update attack progress bar
- * @param {number} progress - The progress percentage (0-100)
- */
-export function updateAttackProgress(progress) {
-    try {
-    const progressBar = document.getElementById('attack-progress-bar');
-    if (progressBar) {
-        progressBar.style.width = `${progress}%`;
-    }
-    
-    const progressText = document.getElementById('attack-progress-text');
-    if (progressText) {
-        progressText.textContent = `${progress}%`;
-        }
-    } catch (error) {
-        console.error('Error updating attack progress:', error);
-    }
-}
-
-/**
  * Update attack log with latest entries
  * @param {Array} logEntries - The log entries to display
  */

@@ -9,7 +9,6 @@ const initialState = {
     selectedNetwork: null,
     selectedAttack: null,
     attackRunning: false,
-    attackProgress: 0,
     attackLog: []
 };
 
@@ -123,14 +122,6 @@ export function setSelectedAttack(attackType) {
  */
 export function setAttackRunning(isRunning) {
     updateState({ attackRunning: isRunning });
-}
-
-/**
- * Update attack progress
- * @param {number} progress - The attack progress (0-100)
- */
-export function updateAttackProgress(progress) {
-    updateState({ attackProgress: progress });
 }
 
 /**

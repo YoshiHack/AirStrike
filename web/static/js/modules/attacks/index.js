@@ -4,8 +4,8 @@
 
 import { attackApi } from '../api.js';
 import { showAlert } from '../ui.js';
-import { updateAttackStatus, updateAttackProgress, updateAttackLog } from '../ui.js';
-import { getState, setSelectedAttack, setAttackRunning, updateAttackProgress as updateStateProgress, updateAttackLog as updateStateLog } from '../state.js';
+import { updateAttackStatus, updateAttackLog } from '../ui.js';
+import { getState, setSelectedAttack, setAttackRunning, updateAttackLog as updateStateLog } from '../state.js';
 import { configureDeauth } from './deauth.js';
 import { configureHandshake } from './handshake.js';
 import { configureEvilTwin } from './evilTwin.js';
@@ -203,8 +203,6 @@ async function checkAttackStatus() {
         const statusData = await attackApi.getStatus();
         setAttackRunning(statusData.running);
         updateAttackStatus(statusData.running);
-        updateStateProgress(statusData.progress);
-        updateAttackProgress(statusData.progress);
     } catch (error) {
         console.error('Error checking attack status:', error);
     }

