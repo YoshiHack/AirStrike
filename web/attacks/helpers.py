@@ -179,8 +179,8 @@ def launch_evil_twin_attack(network, attack_config):
     update_attack_progress(10)
     
     # Create config files
-    hostapd_conf = create_hostapd_config(config['interface'], ssid, channel)
-    dnsmasq_conf = create_dnsmasq_config(config['interface'])
+    hostapd_conf = create_hostapd_config(config['interface'], ssid, channel, output_dir)
+    dnsmasq_conf = create_dnsmasq_config(config['interface'], output_dir)
     
     if hostapd_conf and dnsmasq_conf:
         # Setup network
