@@ -6,51 +6,25 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from .helpers import get_attack_status, get_attack_log, get_captured_handshakes
-from web.shared import config, is_sudo_authenticated
+from web.shared import config
 
 results_bp = Blueprint('results', __name__)
 @results_bp.route('/results')
 def show_results():
-    # Check if sudo is authenticated before rendering the page
-    if not is_sudo_authenticated():
-        # Redirect directly to sudo auth page
-        return redirect(url_for('settings.sudo_auth', next=url_for('results.show_results')))
-    
-    # If sudo is authenticated, render the results page
+    # Root execution is enforced at startup, so no need to check here anymore
     return render_template('results.html')
 
 @results_bp.route('/attack_status')
 def attack_status():
-    # Check if sudo is authenticated
-    if not is_sudo_authenticated():
-        return jsonify({
-            'success': False, 
-            'error': 'sudo_auth_required',
-            'redirect': url_for('settings.sudo_auth', next=request.referrer or url_for('results.show_results'))
-        }), 401
-    
+    # Root execution is enforced at startup, so no need to check here anymore
     return jsonify(get_attack_status())
 
 @results_bp.route('/attack_log')
 def attack_log():
-    # Check if sudo is authenticated
-    if not is_sudo_authenticated():
-        return jsonify({
-            'success': False, 
-            'error': 'sudo_auth_required',
-            'redirect': url_for('settings.sudo_auth', next=request.referrer or url_for('results.show_results'))
-        }), 401
-    
+    # Root execution is enforced at startup, so no need to check here anymore
     return jsonify({'log': get_attack_log()})
 
 @results_bp.route('/captured_handshakes')
 def captured_handshakes():
-    # Check if sudo is authenticated
-    if not is_sudo_authenticated():
-        return jsonify({
-            'success': False, 
-            'error': 'sudo_auth_required',
-            'redirect': url_for('settings.sudo_auth', next=request.referrer or url_for('results.show_results'))
-        }), 401
-    
+    # Root execution is enforced at startup, so no need to check here anymore
     return jsonify({'handshakes': get_captured_handshakes()})

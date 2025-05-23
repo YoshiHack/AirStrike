@@ -12,20 +12,16 @@ os.environ['GEVENT_SUPPORT'] = 'True'
 os.environ['PYTHONUNBUFFERED'] = '1'  # Ensure output is not buffered
 os.environ['AIRSTRIKE_DEBUG'] = '1'   # Still enable our own debugging
 
-# Check if script is running with sudo/root privileges
+# Ensure the script is running with root privileges
 if os.geteuid() != 0:
     print("=" * 80)
-    print("WARNING: AirStrike is not running with root privileges!")
-    print("Certain features like deauthentication attacks require root access.")
+    print("ERROR: AirStrike must be run with root privileges!")
+    print("The application will now exit.")
     print("Please restart with: sudo python run.py")
     print("=" * 80)
-    
-    # Ask if the user wants to continue anyway
-    response = input("Do you want to continue without root privileges? (y/n): ")
-    if response.lower() not in ['y', 'yes']:
-        print("Exiting...")
-        sys.exit(1)
-    print("Continuing without root privileges. Some features may not work correctly.")
+    sys.exit(1)
+
+print("Running AirStrike with root privileges. All features will be available.")
 
 # Add the current directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

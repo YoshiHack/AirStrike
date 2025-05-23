@@ -6,23 +6,15 @@
 <div class="card">
     <div class="card-header">Settings</div>
     <div class="card-body">
-        <!-- Sudo Configuration Status -->
+        <!-- Administrator Privileges Notice -->
         <div class="card mb-4">
             <div class="card-header">Administrator Privileges</div>
             <div class="card-body">
-                {% if sudo_configured %}
                 <div class="alert alert-success">
-                    <strong>Administrator privileges configured</strong>
-                    <p>AirStrike has the necessary privileges to perform WiFi operations.</p>
+                    <strong>Running with root privileges</strong>
+                    <p>AirStrike is running with full administrator privileges. All features are available.</p>
                 </div>
-                {% else %}
-                <div class="alert alert-warning">
-                    <strong>Administrator privileges required</strong>
-                    <p>AirStrike needs administrator (sudo) privileges to perform WiFi operations like scanning networks and changing interface modes.</p>
-                    <a href="{{ url_for('settings.sudo_auth', next=request.path) }}" class="btn btn-primary mt-2">Configure Sudo Authentication</a>
-                </div>
-                {% endif %}
-                <p class="mt-3">WiFi operations like changing network interface modes and scanning for networks require administrator privileges on Linux systems. AirStrike stores your sudo password securely in memory for the duration of this session only.</p>
+                <p class="mt-3">AirStrike requires administrator privileges to access network interfaces and perform WiFi operations.</p>
             </div>
         </div>
         

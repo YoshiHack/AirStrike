@@ -7,7 +7,7 @@ import shutil
 # Add the project root directory to Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-from web.shared import logger, config, run_with_sudo, is_sudo_authenticated
+from web.shared import logger, config, run_with_sudo
 from .helpers import get_interface_details, get_system_info
 
 diagnostics_bp = Blueprint('diagnostics', __name__)
@@ -15,10 +15,7 @@ diagnostics_bp = Blueprint('diagnostics', __name__)
 @diagnostics_bp.route('/diagnostics')
 def show_diagnostics():
     """Render the diagnostics page"""
-    # Check if sudo is authenticated before rendering the page
-    if not is_sudo_authenticated():
-        # Redirect directly to sudo auth page
-        return redirect(url_for('settings.sudo_auth', next=url_for('diagnostics.show_diagnostics')))
+    # Root execution is enforced at startup, so no need to check here anymore
     
     # Get system info
     system_info = get_system_info()
@@ -44,10 +41,7 @@ def show_diagnostics():
 @diagnostics_bp.route('/run_diagnostic', methods=['POST'])
 def run_diagnostic():
     """Run a diagnostic command with sudo privileges"""
-    # Check if sudo is authenticated
-    if not is_sudo_authenticated():
-        flash('Administrator privileges required', 'danger')
-        return redirect(url_for('settings.sudo_auth', next=request.referrer or url_for('diagnostics.show_diagnostics')))
+    # Root execution is enforced at startup, so no need to check here anymore
     
     command = request.form.get('command')
     if not command:

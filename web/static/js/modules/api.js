@@ -16,22 +16,7 @@ socket.on('disconnect', () => {
     console.log('Disconnected from server');
 });
 
-/**
- * Handle sudo authentication redirect
- * @param {Object} data - Response data containing redirect URL
- */
-function handleSudoAuthRedirect(data) {
-    if (data && data.redirect) {
-        // Show message before redirecting
-        showSudoRequiredMessage();
-        // Redirect after a short delay to allow message to be seen
-        setTimeout(() => {
-            window.location.href = data.redirect;
-        }, 500);
-        return true;
-    }
-    return false;
-}
+// Sudo authentication handling removed since we enforce root execution at startup
 
 /**
  * Make a GET request to the specified endpoint
@@ -42,14 +27,8 @@ export async function apiGet(url) {
     try {
         const response = await fetch(url);
         
-        // Handle sudo authentication required
-        if (response.status === 401) {
-            const data = await response.json();
-            if (data.error === 'sudo_auth_required') {
-                handleSudoAuthRedirect(data);
-                return null;
-            }
-        }
+        // Root execution is enforced at startup, so 401 errors should not happen
+        // If they do occur, they are handled by the general error case below
         
         if (!response.ok) {
             throw new Error(`HTTP error ${response.status}`);
@@ -78,14 +57,8 @@ export async function apiPost(url, data) {
             body: JSON.stringify(data)
         });
         
-        // Handle sudo authentication required
-        if (response.status === 401) {
-            const responseData = await response.json();
-            if (responseData.error === 'sudo_auth_required') {
-                handleSudoAuthRedirect(responseData);
-                return null;
-            }
-        }
+        // Root execution is enforced at startup, so 401 errors should not happen
+        // If they do occur, they are handled by the general error case below
         
         if (!response.ok) {
             throw new Error(`HTTP error ${response.status}`);
@@ -98,30 +71,7 @@ export async function apiPost(url, data) {
     }
 }
 
-/**
- * Show a message to the user that sudo authentication is required
- */
-function showSudoRequiredMessage() {
-    // Create an alert element if it doesn't exist
-    let alertElement = document.getElementById('sudo-auth-alert');
-    if (!alertElement) {
-        alertElement = document.createElement('div');
-        alertElement.id = 'sudo-auth-alert';
-        alertElement.className = 'alert alert-info';
-        alertElement.innerHTML = `
-            <strong>Administrator privileges required</strong>
-            <p>This operation requires administrator privileges. You will be redirected to the authentication page.</p>
-        `;
-        
-        // Insert at the top of the page
-        const container = document.querySelector('.container');
-        if (container) {
-            container.insertBefore(alertElement, container.firstChild);
-        } else {
-            document.body.insertBefore(alertElement, document.body.firstChild);
-        }
-    }
-}
+// Sudo required message removed since we enforce root execution at startup
 
 /**
  * Network API functions
@@ -135,14 +85,8 @@ export const networkApi = {
         try {
             const response = await fetch('/scan_wifi');
             
-            // Handle sudo authentication required
-            if (response.status === 401) {
-                const data = await response.json();
-                if (data.error === 'sudo_auth_required') {
-                    handleSudoAuthRedirect(data);
-                    return [];
-                }
-            }
+            // Root execution is enforced at startup, so 401 errors should not happen
+            // If they do occur, they are handled by the general error case below
             
             if (!response.ok) {
                 throw new Error(`HTTP error! Status: ${response.status}`);
@@ -173,14 +117,8 @@ export const networkApi = {
         try {
             const response = await fetch('/scan_wifi?check_only=true');
             
-            // Handle sudo authentication required
-            if (response.status === 401) {
-                const data = await response.json();
-                if (data.error === 'sudo_auth_required') {
-                    handleSudoAuthRedirect(data);
-                    return { success: false, error: 'Authentication required' };
-                }
-            }
+            // Root execution is enforced at startup, so 401 errors should not happen
+            // If they do occur, they are handled by the general error case below
             
             if (!response.ok) {
                 throw new Error(`HTTP error! Status: ${response.status}`);

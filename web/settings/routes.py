@@ -22,8 +22,7 @@ def show_settings():
                           interfaces=interfaces, 
                           current_interface=config['interface'],
                           default_wordlist=config['wordlist'],
-                          output_dir=config['output_dir'],
-                          sudo_configured=config.get('sudo_configured', False))
+                          output_dir=config['output_dir'])
 
 # API Endpoints
 
@@ -60,42 +59,4 @@ def save_output_dir():
         return jsonify({'success': success})
     return jsonify({'success': False, 'error': 'No output directory provided'})
 
-@settings_bp.route('/sudo_auth', methods=['GET', 'POST'])
-def sudo_auth():
-    """Handle sudo password authentication"""
-    error = None
-    
-    # If running as root, skip authentication
-    if is_running_as_root():
-        config['sudo_configured'] = True
-        flash('Running as root. Sudo authentication not required.', 'success')
-        redirect_to = request.args.get('next', url_for('settings.show_settings'))
-        return redirect(redirect_to)
-    
-    if request.method == 'POST':
-        password = request.form.get('password')
-        if not password:
-            flash('Password is required', 'danger')
-            error = 'Password is required'
-            return render_template('sudo_auth.html', next=request.args.get('next', '/'), error=error)
-        
-        # Test the password with a simple command that requires sudo
-        success, output, error_msg = run_with_sudo("id -u", password)
-        
-        if success and output.strip() == "0":  # 0 is the user ID of root
-            # Password is correct, save it
-            config['sudo_password'] = password
-            config['sudo_configured'] = True
-            flash('Sudo authentication successful', 'success')
-            
-            # Redirect to the page they were trying to access
-            redirect_to = request.args.get('next', url_for('settings.show_settings'))
-            return redirect(redirect_to)
-        else:
-            error = 'Authentication failed: ' + (error_msg or 'Incorrect password')
-            flash(error, 'danger')
-            config['sudo_configured'] = False  # Ensure we mark as not configured
-            return render_template('sudo_auth.html', next=request.args.get('next', '/'), error=error)
-    
-    # GET request - show the auth form
-    return render_template('sudo_auth.html', next=request.args.get('next', '/'), error=error)
+# Removed sudo_auth route since we're enforcing root execution at startup

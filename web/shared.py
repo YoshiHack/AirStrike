@@ -56,9 +56,8 @@ shared = Blueprint('shared', __name__)
 config = {
     'interface': 'wlan0',
     'wordlist': '/usr/share/wordlists/rockyou.txt',
-    'output_dir': './captures/',
-    'sudo_password': '',  # Will be set by the user through the UI
-    'sudo_configured': False  # Flag to track if sudo has been configured
+    'output_dir': './captures/'
+    # Removed sudo password and configuration flags since we require root execution
 }
 
 # Attack state
@@ -114,59 +113,44 @@ def reset_attack_state():
 def run_with_sudo(command, password=None):
     """
     Run a command with sudo privileges.
+    Since we're running as root, this is simplified to just run the command directly.
     
     Args:
         command (str): The command to run
-        password (str, optional): The sudo password. If None, uses the one in config
+        password (str, optional): Ignored parameter, kept for compatibility
         
     Returns:
         tuple: (success, output, error)
     """
     try:
-        # Use the password from config if not provided
-        if password is None:
-            password = config.get('sudo_password', '')
-        
-        # If no password is set, log a warning and try to run without sudo
-        if not password and not config.get('sudo_configured', False):
-            logger.warning("No sudo password configured. Attempting to run command without sudo.")
+        # If we're already running as root, don't use sudo
+        if os.geteuid() == 0:
+            # Run the command directly without sudo
             process = subprocess.Popen(
-                command,
-                shell=True,
+                command.split(),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True
             )
-            stdout, stderr = process.communicate()
-            return process.returncode == 0, stdout, stderr
+        else:
+            # Run with sudo if we're not root
+            process = subprocess.Popen(
+                ['sudo'] + command.split(),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
         
-        # Run the command with sudo using the provided password
-        process = subprocess.Popen(
-            ['sudo', '-S'] + command.split(),
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        
-        # Provide the password to sudo
-        stdout, stderr = process.communicate(input=password + '\n')
-        
-        # Check if the command was successful
+        stdout, stderr = process.communicate()
         success = process.returncode == 0
         
-        # If the command failed, check for common sudo error messages
+        # Log command execution for debugging
         if not success:
-            stderr_lower = stderr.lower()
-            if any(msg in stderr_lower for msg in ["incorrect password", "sorry, try again", "authentication failure"]):
-                config['sudo_configured'] = False
-                logger.error("Sudo authentication failed: Incorrect password")
-                return False, stdout, "Incorrect sudo password"
+            logger.debug(f"Command failed: {command}\nStderr: {stderr}")
         
         return success, stdout, stderr
-    
     except Exception as e:
-        logger.error(f"Error running command with sudo: {e}")
+        logger.error(f"Error running command: {e}")
         return False, "", str(e)
 
 def is_running_as_root():
@@ -191,11 +175,9 @@ def can_run_sudo_without_password():
 
 def is_sudo_authenticated():
     """
-    Returns True if the user is authenticated for sudo (either running as root, sudo_configured is True, or can run sudo without password).
+    Always returns True since we enforce root execution for the entire application.
+    This function is kept for compatibility with existing code.
     """
-    if is_running_as_root() or can_run_sudo_without_password():
-        config['sudo_configured'] = True
-        return True
-    return config.get('sudo_configured', False)
+    return True
     
     

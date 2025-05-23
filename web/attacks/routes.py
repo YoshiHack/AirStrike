@@ -22,12 +22,7 @@ attacks_bp = Blueprint('attacks', __name__)
 @attacks_bp.route('/attack')
 def show_attack():
     """Render the attack configuration page"""
-    # Check if sudo is authenticated before rendering the page
-    if not is_sudo_authenticated():
-        # Redirect directly to sudo auth page
-        return redirect(url_for('settings.sudo_auth', next=url_for('attacks.show_attack')))
-    
-    # If sudo is authenticated, render the attack page
+    # No need to check sudo anymore since we enforce root execution
     return render_template('attack.html')
 
 @attacks_bp.route('/start_attack', methods=['POST'])
@@ -48,13 +43,7 @@ def start_attack():
         }
     }
     """
-    # Check if sudo is authenticated
-    if not is_sudo_authenticated():
-        return jsonify({
-            'success': False, 
-            'error': 'sudo_auth_required',
-            'redirect': url_for('settings.sudo_auth', next=request.referrer or url_for('attacks.show_attack'))
-        }), 401
+    # Root execution is enforced at startup, so no need to check here anymore
     
     # Check if an attack is already running
     if attack_state['running']:
@@ -135,13 +124,7 @@ def start_attack():
 @attacks_bp.route('/stop_attack', methods=['POST'])
 def stop_attack():
     """Stop the currently running attack"""
-    # Check if sudo is authenticated for stopping the attack
-    if not is_sudo_authenticated():
-        return jsonify({
-            'success': False, 
-            'error': 'sudo_auth_required',
-            'redirect': url_for('settings.sudo_auth', next=request.referrer or url_for('attacks.show_attack'))
-        }), 401
+    # Root execution is enforced at startup, so no need to check here anymore
     
     if not attack_state['running']:
         return jsonify({'success': False, 'error': 'No attack is running'})
@@ -158,13 +141,11 @@ def stop_attack():
         
         # Reset interface to managed mode
         success = set_managed_mode(config['interface'])
-        if not success and not config.get('sudo_configured', False):
-            # If setting managed mode failed due to sudo, redirect to auth
-            return jsonify({
-                'success': False, 
-                'error': 'sudo_auth_required',
-                'redirect': url_for('settings.sudo_auth', next=request.referrer or url_for('attacks.show_attack'))
-            }), 401
+        if not success:
+            # Log the error but continue with attack cleanup
+            error_msg = 'Failed to set interface to managed mode. Continuing with attack cleanup.'
+            logger.warning(error_msg)
+            socketio.emit('attack_warning', {'warning': error_msg})
         
         # Update attack state
         log_message("Attack stopped")

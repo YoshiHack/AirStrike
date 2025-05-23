@@ -6,16 +6,10 @@
 <div class="card">
     <div class="card-header">Dashboard</div>
     <div class="card-body">
-        {% if not sudo_configured %}
-        <div class="alert alert-warning mb-4">
-            <h4 class="alert-heading">Administrator Privileges Required</h4>
-            <p>AirStrike needs administrator (sudo) privileges to perform WiFi operations like scanning networks and changing interface modes.</p>
-            <hr>
-            <p class="mb-0">
-                <a href="{{ url_for('settings.sudo_auth', next=url_for('main.index')) }}" class="btn btn-warning">Configure Authentication</a>
-            </p>
+        <div class="alert alert-success mb-4">
+            <h4 class="alert-heading">Running with Administrator Privileges</h4>
+            <p>AirStrike is running with full administrator privileges. All features are available.</p>
         </div>
-        {% endif %}
         
         <div class="dashboard-stats" id="dashboard-stats">
             <div class="stat-card">

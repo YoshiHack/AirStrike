@@ -281,6 +281,15 @@ def evil_twin_menu():
 
 
 if __name__ == "__main__":
+    # Ensure the script is running with root privileges
+    if os.geteuid() != 0:
+        print("=" * 80)
+        print("ERROR: AirStrike must be run with root privileges!")
+        print("The application will now exit.")
+        print("Please restart with: sudo python main.py")
+        print("=" * 80)
+        sys.exit(1)
+        
     print(banner("AirStrike"))
     team()
     set_managed_mode(interface)
