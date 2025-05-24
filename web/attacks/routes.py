@@ -44,81 +44,84 @@ def start_attack():
     }
     """
     # Root execution is enforced at startup, so no need to check here anymore
-    
-    # Check if an attack is already running
-    if attack_state['running']:
-        return jsonify({'success': False, 'error': 'An attack is already running'})
-    
-    # Validate request data
-    data = request.json
-    if not data:
-        return jsonify({'success': False, 'error': 'No data provided'})
-    
-    if 'network' not in data or 'attack_type' not in data:
-        return jsonify({'success': False, 'error': 'Missing required parameters'})
-    
-    # Get attack parameters
-    network = data['network']
-    attack_type = data['attack_type']
-    attack_config = data.get('config', {})
-    
-    # Validate network data
-    required_network_fields = ['bssid', 'essid', 'channel']
-    for field in required_network_fields:
-        if field not in network:
-            return jsonify({'success': False, 'error': f'Missing required network field: {field}'})
-    
-    # Initialize attack state
-    attack_state['running'] = True
-    attack_state['attack_type'] = attack_type
-    attack_state['target_network'] = network
-    attack_state['progress'] = 0
-    attack_state['log'] = []
-    attack_state['stop_event'] = threading.Event()
-    attack_state['threads'] = []
-    
-    # Log the start of the attack
-    log_message(f"Starting {attack_type} attack on {network['essid']} ({network['bssid']})")
-    
-    # Emit attack started event via WebSocket
-    socketio.emit('attack_started', {
-        'attack_type': attack_type,
-        'target_network': network
-    })
-    
     try:
-        # Launch the appropriate attack
-        if attack_type == 'deauth':
-            launch_deauth_attack(network, attack_config)
-        elif attack_type == 'handshake':
-            launch_handshake_attack(network, attack_config)
-        elif attack_type == 'evil_twin':
-            launch_evil_twin_attack(network, attack_config)
-        else:
+        
+        # Check if an attack is already running
+        if attack_state['running']:
+            return jsonify({'success': False, 'error': 'An attack is already running'})
+        
+        # Validate request data
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'})
+        
+        if 'network' not in data or 'attack_type' not in data:
+            return jsonify({'success': False, 'error': 'Missing required parameters'})
+        
+        # Get attack parameters
+        network = data['network']
+        attack_type = data['attack_type']
+        attack_config = data.get('config', {})
+        
+        # Validate network data
+        required_network_fields = ['bssid', 'essid', 'channel']
+        for field in required_network_fields:
+            if field not in network:
+                return jsonify({'success': False, 'error': f'Missing required network field: {field}'})
+        
+        # Initialize attack state
+        attack_state['running'] = True
+        attack_state['attack_type'] = attack_type
+        attack_state['target_network'] = network
+        attack_state['progress'] = 0
+        attack_state['log'] = []
+        attack_state['stop_event'] = threading.Event()
+        attack_state['threads'] = []
+        
+        # Log the start of the attack
+        log_message(f"Starting {attack_type} attack on {network['essid']} ({network['bssid']})")
+        
+        # Emit attack started event via WebSocket
+        socketio.emit('attack_started', {
+            'attack_type': attack_type,
+            'target_network': network
+        })
+        
+        try:
+            # Launch the appropriate attack
+            if attack_type == 'deauth':
+                launch_deauth_attack(network, attack_config)
+            elif attack_type == 'handshake':
+                launch_handshake_attack(network, attack_config)
+            elif attack_type == 'evil_twin':
+                launch_evil_twin_attack(network, attack_config)
+            else:
+                reset_attack_state()
+                socketio.emit('attack_error', {'error': f'Unknown attack type: {attack_type}'})
+                return jsonify({'success': False, 'error': f'Unknown attack type: {attack_type}'})
+            
+            # Update stats
+            stats['attacks_count'] += 1
+            
+            return jsonify({'success': True})
+        except Exception as e:
             reset_attack_state()
-            socketio.emit('attack_error', {'error': f'Unknown attack type: {attack_type}'})
-            return jsonify({'success': False, 'error': f'Unknown attack type: {attack_type}'})
-        
-        # Update stats
-        stats['attacks_count'] += 1
-        
-        return jsonify({'success': True})
+            
+            # Check if the error is related to sudo
+            error_str = str(e)
+            if "sudo" in error_str.lower() or "permission" in error_str.lower():
+                config['sudo_configured'] = False
+                socketio.emit('attack_error', {'error': 'Administrator privileges required'})
+                return jsonify({
+                    'success': False, 
+                    'error': 'sudo_auth_required',
+                    'redirect': url_for('settings.sudo_auth', next=request.referrer or url_for('attacks.show_attack'))
+                }), 401
+            
+            logger.error(f"Error starting attack: {e}")
+            socketio.emit('attack_error', {'error': str(e)})
+            return jsonify({'success': False, 'error': str(e)})
     except Exception as e:
-        reset_attack_state()
-        
-        # Check if the error is related to sudo
-        error_str = str(e)
-        if "sudo" in error_str.lower() or "permission" in error_str.lower():
-            config['sudo_configured'] = False
-            socketio.emit('attack_error', {'error': 'Administrator privileges required'})
-            return jsonify({
-                'success': False, 
-                'error': 'sudo_auth_required',
-                'redirect': url_for('settings.sudo_auth', next=request.referrer or url_for('attacks.show_attack'))
-            }), 401
-        
-        logger.error(f"Error starting attack: {e}")
-        socketio.emit('attack_error', {'error': str(e)})
         return jsonify({'success': False, 'error': str(e)})
 
 @attacks_bp.route('/stop_attack', methods=['POST'])

