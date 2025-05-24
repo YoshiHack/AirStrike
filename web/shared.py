@@ -92,6 +92,20 @@ def log_message(message):
     formatted_message = f"[{timestamp}] {message}"
     attack_state['log'].append(formatted_message)
     logger.info(formatted_message)
+    
+
+def add_log_message_shared(message):
+    """
+    Add a log message to both the attack log and the application logger.
+    This function is used to break circular imports.
+    
+    Args:
+        message (str): The message to log
+    """
+    log_message(message)
+    
+    # The socketio emit will be handled by the web.attacks.helpers.add_log_message function
+    # This function is only used by modules that can't import web.attacks.helpers directly
 
 def reset_attack_state():
     """
