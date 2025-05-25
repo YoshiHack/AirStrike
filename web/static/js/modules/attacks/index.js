@@ -9,12 +9,14 @@ import { getState, setSelectedAttack, setAttackRunning, updateAttackLog as updat
 import { configureDeauth } from './deauth.js';
 import { configureHandshake } from './handshake.js';
 import { configureEvilTwin } from './evilTwin.js';
+import { configureDosAttack } from './dosAttack.js';
 
 // Attack configuration functions map
 const attackConfigFunctions = {
     'deauth': configureDeauth,
     'handshake': configureHandshake,
-    'evil_twin': configureEvilTwin
+    'evil_twin': configureEvilTwin,
+    'dos': configureDosAttack
 };
 
 /**

