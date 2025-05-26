@@ -10,13 +10,15 @@ import { configureDeauth } from './deauth.js';
 import { configureHandshake } from './handshake.js';
 import { configureEvilTwin } from './evilTwin.js';
 import { configureDosAttack } from './dosAttack.js';
+import { configureKarma } from './karmaAttack.js';
 
 // Attack configuration functions map
 const attackConfigFunctions = {
     'deauth': configureDeauth,
     'handshake': configureHandshake,
     'evil_twin': configureEvilTwin,
-    'dos': configureDosAttack
+    'dos': configureDosAttack,
+    'karma': configureKarma,
 };
 
 /**

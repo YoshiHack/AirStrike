@@ -70,9 +70,6 @@ body {
     transition: background-color 0.3s;
 }
 
-.nav-item:hover, .nav-item.active {
-    background-color: var(--primary-color);
-}
 
 /* Card Styles */
 .card {
@@ -396,7 +393,7 @@ label {
 .attack-option {
     flex: 1;
     padding: 15px;
-    border: 1px solid var(--input-border);
+    border: 1px solid var(--secondary-color);
     border-radius: 5px;
     text-align: center;
     cursor: pointer;
