@@ -23,9 +23,11 @@ def main_menu():
         print("2. Handshake Cracker")
         print("3. Evil Twin Attack")
         print("4. MITM Attack (Coming Soon)")
+        print("5. DNS Spoofing (Coming Soon)")
+        print("6. SSL Stripping (Coming Soon)")
         print("0. Exit")
         
-        choice = input("\nSelect an option (0-4): ").strip()
+        choice = input("\nSelect an option (0-6): ").strip()
         
         if choice == "1":
             deauth_menu()
@@ -33,8 +35,8 @@ def main_menu():
             cracker_menu()
         elif choice == "3":
             evil_twin_menu()
-        elif choice == "4":
-            print("MITM Attack is coming soon!")
+        elif choice in ["4", "5", "6"]:
+            print("\n[!] This feature is under development. Coming soon...")
         elif choice == "0":
             print("Exiting...")
             break
@@ -279,6 +281,15 @@ def evil_twin_menu():
 
 
 if __name__ == "__main__":
+    # Ensure the script is running with root privileges
+    if os.geteuid() != 0:
+        print("=" * 80)
+        print("ERROR: AirStrike must be run with root privileges!")
+        print("The application will now exit.")
+        print("Please restart with: sudo python main.py")
+        print("=" * 80)
+        sys.exit(1)
+        
     print(banner("AirStrike"))
     team()
     set_managed_mode(interface)

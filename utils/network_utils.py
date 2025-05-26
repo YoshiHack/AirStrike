@@ -15,6 +15,19 @@ def set_monitor_mode(interface_name):
         print("[Setup] Error: required tools not found (ifconfig/iwconfig).")
         sys.exit(1)
 
+def is_monitor_mode(interface):
+    try:
+        result = subprocess.run(
+            ["iwconfig", interface],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        output = result.stdout.lower()
+        return "mode:monitor" in output
+    except Exception as e:
+        print(f"Error checking mode for {interface}: {e}")
+        return False
 
 def set_managed_mode(interface_name):
     try:
@@ -29,124 +42,106 @@ def set_managed_mode(interface_name):
         print("[Setup] Error: 'ifconfig' or 'iwconfig' command not found. Ensure network tools are installed.")
         sys.exit(1)
 
-def run_scan(interface):
+def reset_wifi_mode(interface='wlan0'):
     """
-    Scans for available Wi-Fi networks and returns a list of dictionaries
-    containing network information.
-
+    Reset wireless interface to managed mode.
+    
     Args:
-        interface (str): The network interface to use for scanning (e.g., "wlan0").
-
+        interface (str): Name of the wireless interface (default: 'wlan0')
+    
     Returns:
-        list: A list of dictionaries, where each dictionary represents a Wi-Fi network
-              and contains its details. Returns an empty list if an error occurs or
-              no networks are found.
+        bool: True if successful, False if any error occurred
     """
-    print(f"Scanning for Wi-Fi networks on interface {interface}...")
+    commands = [
+        ['sudo', 'ifconfig', interface, 'down'],
+        ['sudo', 'iwconfig', interface, 'mode', 'managed'],
+        ['sudo', 'ifconfig', interface, 'up']
+    ]
+    
     try:
-        # Using iw scan is often preferred over iwlist nowadays if available
-        # Trying iwlist first as it was in the original code
-        try:
-            result = subprocess.run(['sudo', 'iwlist', interface, 'scanning'], capture_output=True, text=True, check=True, timeout=20)
-        except FileNotFoundError:
-             print(f"iwlist not found. Trying 'iw dev {interface} scan'...")
-             result = subprocess.run(['sudo', 'iw', 'dev', interface, 'scan'], capture_output=True, text=True, check=True, timeout=20)
-        except subprocess.CalledProcessError as e:
-             # Sometimes scanning immediately after bringing interface up fails
-             # Or permissions might be wrong even with sudo
-             print(f"Error running scan command with iwlist: {e}")
-             print(f"Trying 'iw dev {interface} scan' as fallback...")
-             try:
-                 result = subprocess.run(['sudo', 'iw', 'dev', interface, 'scan'], capture_output=True, text=True, check=True, timeout=20)
-             except Exception as iw_err:
-                 print(f"Error running scan command with iw: {iw_err}")
-                 return []
-        except subprocess.TimeoutExpired:
-            print("Scanning timed out.")
-            return []
+        for cmd in commands:
+            result = subprocess.run(cmd, 
+                                  check=True, 
+                                  stderr=subprocess.PIPE, 
+                                  stdout=subprocess.PIPE,
+                                  text=True)
+            if result.returncode != 0:
+                raise subprocess.CalledProcessError(
+                    result.returncode, 
+                    cmd, 
+                    result.stdout, 
+                    result.stderr
+                )
+        
+        print(f"Successfully reset {interface} to managed mode")
+        return True
+        
+    except subprocess.CalledProcessError as e:
+        print(f"Command failed: {' '.join(e.cmd)}")
+        print(f"Error: {e.stderr.strip()}")
+        return False
+    except Exception as e:
+        print(f"Unexpected error resetting {interface}: {str(e)}")
+        return False
 
-
+global available_aps
+def run_scan(interface):
+    available_aps = []
+    try:
+        if(is_monitor_mode(interface)):
+            reset_wifi_mode(interface)
+        result = subprocess.run(['iwlist', interface, 'scanning'], capture_output=True, text=True, check=True)
         output = result.stdout
         aps = []
+        lines = output.split('\n')
+        ap = {}
 
-        # --- Parsing Logic for iwlist ---
-        if 'iwlist' in result.args[1]:
-            current_ap = {}
-            for line in output.split('\n'):
-                line = line.strip()
-                if line.startswith('Cell'):
-                    if current_ap:  # Save the previous AP before starting a new one
-                        # Basic check for essential info before adding
-                        if 'BSSID' in current_ap and 'ESSID' in current_ap and 'Channel' in current_ap:
-                            aps.append(current_ap)
-                        else:
-                            pass # Skip incomplete entries quietly
-                    current_ap = {}
-                    match = re.search(r'Address:\s*([\da-fA-F:]+)', line, re.IGNORECASE)
-                    if match:
-                        current_ap['BSSID'] = match.group(1).upper() # Standardize BSSID case
-                elif line.startswith('ESSID:"'):
-                    current_ap['ESSID'] = line.split('"')[1]
-                elif line.startswith('Channel:'):
-                     # Handle potential extra text like "(secondary)"
-                    channel_match = re.search(r'Channel:(\d+)', line)
-                    if channel_match:
-                        current_ap['Channel'] = channel_match.group(1)
-                # Add other fields if needed (like Quality, Signal Strength etc.)
+        for line in lines:
+            line = line.strip()
+            if line.startswith('Cell'):
+                if ap:
+                    aps.append(ap)
+                ap = {}
+                match = re.search(r'Address: ([\da-fA-F:]+)', line)
+                if match:
+                    ap['BSSID'] = match.group(1)
 
-            if current_ap: # Add the last AP found
-                 if 'BSSID' in current_ap and 'ESSID' in current_ap and 'Channel' in current_ap:
-                    aps.append(current_ap)
+            elif line.startswith('ESSID:"'):
+                ap['ESSID'] = line.split('"')[1]
 
-        # --- Parsing Logic for iw (more modern) ---
-        elif 'iw' in result.args[1]:
-             current_ap = {}
-             blocks = output.split('BSS ') # Split output by AP blocks
-             for block in blocks[1:]: # Skip the first part before the first BSS
-                lines = block.strip().split('\n')
-                current_ap = {}
-                bssid_match = re.match(r'([\da-fA-F:]+)\(on', lines[0])
-                if bssid_match:
-                    current_ap['BSSID'] = bssid_match.group(1).upper()
+            elif line.startswith('Mode:'):
+                ap['Mode'] = line.split(':')[1].strip()
 
-                for line in lines[1:]:
-                    line = line.strip()
-                    if line.startswith('SSID:'):
-                        current_ap['ESSID'] = line.split(':', 1)[1].strip()
-                    elif line.startswith('DS Parameter set: channel'):
-                        current_ap['Channel'] = line.split('channel')[1].strip()
-                    elif line.startswith('freq:'): # Alternative way to find channel for some outputs
-                         if 'Channel' not in current_ap:
-                             freq = int(line.split(':')[1].strip())
-                             if 2412 <= freq <= 2484: # 2.4 GHz band
-                                 channel = str(int((freq - 2407) / 5))
-                                 current_ap['Channel'] = channel
-                             elif 5180 <= freq <= 5825: # 5 GHz band (approximate mapping)
-                                 channel = str(int((freq - 5000) / 5))
-                                 current_ap['Channel'] = channel
+            elif line.startswith('Frequency:'):
+                # Example: Frequency:2.412 GHz (Channel 1)
+                freq_part = line.split(':')[1].strip()
+                freq_clean = re.sub(r'\s(Channel.?)', '', freq_part)
+                ap['Frequency'] = freq_clean
 
-                # Basic check for essential info before adding
-                if 'BSSID' in current_ap and current_ap.get('ESSID') and 'Channel' in current_ap:
-                     aps.append(current_ap)
+                # Extract channel number
+                channel_match = re.search(r'Channel\s*(\d+)', line)
+                if channel_match:
+                    ap['Channel'] = channel_match.group(1)
 
+            elif line.startswith('Encryption key:'):
+                ap['Encryption'] = line.split(':')[1].strip()
 
-        if not aps:
-             print("No Wi-Fi networks found or parsed.")
-        else:
-             print(f"Found {len(aps)} Wi-Fi networks.")
-        return aps
+            elif 'Signal level=' in line:
+                # Example: Quality=70/70  Signal level=-39 dBm
+                signal_match = re.search(r'Signal level=([-\d]+)', line)
+                if signal_match:
+                    ap['Signal'] = signal_match.group(1) + " dBm"
 
-    except FileNotFoundError:
-        print(f"Error: 'iwlist' or 'iw' command not found. Please ensure wireless tools are installed.")
-        return []
+        if ap:
+            aps.append(ap)
+
+        available_aps = aps
+        return available_aps
+
     except subprocess.CalledProcessError as e:
         print(f"Error scanning APs: {e}")
-        if e.stderr:
-            print(f"Stderr: {e.stderr}")
         return []
-    except Exception as e:
-        print(f"An unexpected error occurred during scanning: {e}")
-        return []
+
 
 
 def display_and_choose_ap(ap_list):
