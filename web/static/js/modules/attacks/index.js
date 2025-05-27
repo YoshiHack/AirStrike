@@ -96,8 +96,31 @@ function showAttackConfig(attackType) {
 export async function startAttack() {
     const state = getState();
     
-    if (!state.selectedNetwork || !state.selectedAttack) {
-        showAlert('Please select a network and attack type', 'warning');
+    if (!state.selectedAttack) {
+        showAlert('Please select an attack type', 'warning');
+        return;
+    }
+    
+    // Special handling for Karma attack since it doesn't need a real network
+    let network = state.selectedNetwork;
+    if (state.selectedAttack === 'karma') {
+        const karmaConfig = getAttackConfig(state.selectedAttack);
+        if (!karmaConfig.essid) {
+            showAlert('Please select a target network from probe requests', 'warning');
+            return;
+        }
+        // Create dummy network object for Karma attack
+        network = {
+            bssid: '00:11:22:33:44:55', // Dummy BSSID
+            essid: karmaConfig.essid,    // Selected from probe requests
+            channel: '1',                // Default channel
+            encryption: 'WPA2',          // Default encryption
+            signal: -50,                 // Dummy signal strength
+            frequency: '2.4',            // Default frequency
+            rates: ['1', '2', '5.5', '11', '6', '9', '12', '18', '24', '36', '48', '54'] // Common rates
+        };
+    } else if (!network) {
+        showAlert('Please select a target network', 'warning');
         return;
     }
     
@@ -107,7 +130,7 @@ export async function startAttack() {
     try {
         // Make API call to start attack
         const result = await attackApi.startAttack(
-            state.selectedNetwork,
+            network,
             state.selectedAttack,
             attackConfig
         );
@@ -170,6 +193,11 @@ function getAttackConfig(attackType) {
         case 'evil_twin':
             config.channel = parseInt(document.getElementById('evil-twin-channel')?.value || '1');
             config.captive_portal = document.getElementById('evil-twin-captive')?.value === 'true';
+            break;
+            
+        case 'karma':
+            config.essid = document.getElementById('karma-network')?.value;
+            config.scan_duration = parseInt(document.getElementById('karma-duration')?.value || '20');
             break;
     }
     

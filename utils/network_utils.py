@@ -1,30 +1,75 @@
 import subprocess
 import re
 import sys
-
+from scapy.all import sniff
+from scapy.layers.dot11 import Dot11, Dot11ProbeReq, Dot11Elt
 def set_monitor_mode(interface_name):
+    """
+    Set wireless interface to monitor mode.
+    
+    Args:
+        interface_name (str): Name of the wireless interface
+        
+    Returns:
+        bool: True if successful
+        
+    Raises:
+        RuntimeError: If setting monitor mode fails
+        FileNotFoundError: If required tools are not found
+    """
     try:
-        subprocess.run(['sudo', 'ifconfig', interface_name, 'down'], check=True)
-        subprocess.run(['sudo', 'iwconfig',   interface_name, 'mode',    'monitor'], check=True)
-        subprocess.run(['sudo', 'ifconfig', interface_name, 'up'],   check=True)
-        print(f"[Setup] Interface {interface_name} set to monitor mode.")
+        # First ensure interface exists and is recognized
+        subprocess.run(['sudo', 'rfkill', 'unblock', 'all'], check=True, capture_output=True)
+        
+        # Try to reset interface first
+        subprocess.run(['sudo', 'ip', 'link', 'set', interface_name, 'down'], check=True, capture_output=True)
+        subprocess.run(['sudo', 'iw', interface_name, 'set', 'type', 'managed'], check=False, capture_output=True)
+        subprocess.run(['sudo', 'ip', 'link', 'set', interface_name, 'up'], check=True, capture_output=True)
+        
+        # Now set monitor mode
+        subprocess.run(['sudo', 'ip', 'link', 'set', interface_name, 'down'], check=True, capture_output=True)
+        subprocess.run(['sudo', 'iw', interface_name, 'set', 'type', 'monitor'], check=True, capture_output=True)
+        subprocess.run(['sudo', 'ip', 'link', 'set', interface_name, 'up'], check=True, capture_output=True)
+        
+        # Verify monitor mode was set
+        for _ in range(3):  # Try up to 3 times
+            if is_monitor_mode(interface_name):
+                print(f"[Setup] Interface {interface_name} set to monitor mode.")
+                return True
+            import time
+            time.sleep(1)
+            
+        raise RuntimeError("Interface exists but failed to enter monitor mode")
+        
     except subprocess.CalledProcessError as e:
-        print(f"[Setup] Error setting {interface_name} to monitor mode: {e.stderr.decode()}")
-        sys.exit(1)
+        error_msg = e.stderr.decode() if e.stderr else str(e)
+        print(f"[Setup] Error setting {interface_name} to monitor mode: {error_msg}")
+        raise RuntimeError(f"Failed to set monitor mode: {error_msg}")
     except FileNotFoundError:
-        print("[Setup] Error: required tools not found (ifconfig/iwconfig).")
-        sys.exit(1)
+        print("[Setup] Error: required tools not found (ip/iw).")
+        raise FileNotFoundError("Required tools (ip/iw) not found")
 
 def is_monitor_mode(interface):
+    """Check if interface is in monitor mode"""
     try:
+        # Try iw first (more reliable)
+        result = subprocess.run(
+            ["sudo", "iw", interface, "info"],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        if "type monitor" in result.stdout.lower():
+            return True
+            
+        # Fallback to iwconfig
         result = subprocess.run(
             ["iwconfig", interface],
             capture_output=True,
             text=True,
             check=False
         )
-        output = result.stdout.lower()
-        return "mode:monitor" in output
+        return "mode:monitor" in result.stdout.lower()
     except Exception as e:
         print(f"Error checking mode for {interface}: {e}")
         return False
@@ -200,6 +245,54 @@ def display_and_choose_ap(ap_list):
         except KeyboardInterrupt:
              print("\nSelection cancelled by user.")
              return None, None
+         
+def sniff_probe_requests(interface, duration=20):
+    """
+    Sniff for probe requests on the given interface.
+    
+    Args:
+        interface (str): Network interface to use
+        duration (int): Duration to sniff in seconds
+        
+    Returns:
+        list: List of unique SSIDs from probe requests
+    """
+    try:
+        # Ensure interface is in monitor mode
+        if not is_monitor_mode(interface):
+            set_monitor_mode(interface)
+        
+        print(f"[*] Sniffing for probe requests on {interface} for {duration} seconds...")
+        ssids = set()
+
+        def packet_handler(pkt):
+            if pkt.haslayer(Dot11ProbeReq):
+                if pkt.haslayer(Dot11Elt) and pkt.ID == 0:  # SSID element
+                    try:
+                        ssid = pkt.info.decode(errors="ignore").strip()
+                        if ssid and not ssid.isspace():  # Only add non-empty SSIDs
+                            ssids.add(ssid)
+                            print(f"[+] Detected probe request for: {ssid}")
+                    except Exception as e:
+                        print(f"[-] Error decoding SSID: {e}")
+
+        # Start sniffing
+        sniff(iface=interface, prn=packet_handler, timeout=duration)
+        
+        # Convert set to sorted list
+        result = sorted(list(ssids))
+        print(f"[*] Found {len(result)} unique networks: {result}")
+        return result
+        
+    except Exception as e:
+        print(f"[-] Error during probe request sniffing: {e}")
+        return []
+    finally:
+        try:
+            # Always try to reset to managed mode
+            set_managed_mode(interface)
+        except Exception as e:
+            print(f"[-] Error resetting interface mode: {e}")
 
 # --- Main Execution ---
 if __name__ == "__main__":
