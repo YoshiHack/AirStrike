@@ -13,7 +13,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 # Import shared variables and helpers
 from web.shared import attack_state, stats, config, logger, log_message, reset_attack_state, is_sudo_authenticated
 from web.attacks.helpers import (launch_deauth_attack, launch_handshake_attack, 
-                               launch_evil_twin_attack, update_attack_progress, add_log_message,dos_attack)
+                               launch_evil_twin_attack, update_attack_progress, add_log_message,
+                               dos_attack, launch_karma_attack)
 from utils.network_utils import set_managed_mode
 from web.socket_io import socketio
 
@@ -97,6 +98,8 @@ def start_attack():
                 launch_evil_twin_attack(network, attack_config)
             elif attack_type == 'dos':
                 dos_attack(network["bssid"],network["channel"],shared.config["interface"])
+            elif attack_type == 'karma':
+                launch_karma_attack(network, attack_config)
             else:
                 reset_attack_state()
                 socketio.emit('attack_error', {'error': f'Unknown attack type: {attack_type}'})
