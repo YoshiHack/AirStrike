@@ -11,7 +11,7 @@
     --info-color: #17a2b8;
     --dark-color: #343a40;
     --light-color: #f8f9fa;
-    
+
     /* Theme variables that are used but might not be defined in theme.css */
     --accent-primary: #00ff41;
     --accent-secondary: #00b336;
@@ -78,7 +78,7 @@ body {
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     margin-bottom: 20px;
     overflow: hidden;
-    transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1), 
+    transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1),
                 box-shadow 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
     border: var(--card-border);
 }
@@ -445,6 +445,25 @@ label {
     color: var(--accent-primary);
 }
 
+/* Attack sub-configuration styles */
+.attack-subconfig {
+    margin-top: 15px;
+    padding: 15px;
+    border: 1px solid var(--input-border);
+    border-radius: 5px;
+    background-color: var(--bg-tertiary);
+}
+
+.attack-subconfig .form-group {
+    margin-bottom: 12px;
+}
+
+.attack-subconfig .form-text {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-top: 5px;
+}
+
 /* Progress bar styles - currently not used in results page but kept for potential future use */
 .progress-container {
     margin: 20px 0;
@@ -498,11 +517,11 @@ label {
     .dashboard-stats {
         flex-direction: column;
     }
-    
+
     .attack-options {
         flex-direction: column;
     }
-    
+
     .nav {
         flex-direction: column;
     }
@@ -535,7 +554,7 @@ label {
     align-items: flex-start;
     transform: translateX(120%);
     opacity: 0;
-    transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1), 
+    transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1),
                 opacity 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
     position: relative;
     overflow: hidden;

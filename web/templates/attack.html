@@ -8,7 +8,7 @@
     <div class="card-body">
         <!-- Selected Network Information -->
         <div id="selected-network-info" class="mb-4"></div>
-        
+
         <!-- Attack Type Selection -->
         <div class="card mb-4">
             <div class="card-header">Select Attack Type</div>
@@ -57,9 +57,9 @@
                         </div>
                     </div>
                     <div class="attack-options-row">
-                        <div class="attack-option" data-attack="dhcp_flood">
-                            <h3>DHCP Flood</h3>
-                            <p>Exhaust available IP addresses by flooding DHCP requests</p>
+                        <div class="attack-option" data-attack="dhcp">
+                            <h3>DHCP Attack</h3>
+                            <p>Multiple DHCP attack types: starvation, rogue server, and spoofing</p>
                         </div>
                         <div class="attack-option" data-attack="icmp_flood">
                             <h3>ICMP Flood</h3>
@@ -67,10 +67,10 @@
                         </div>
                     </div>
                 </div>
-            </div>            
+            </div>
         </div>
 
-        
+
         <!-- Attack Configuration Options -->
         <div class="card mb-4">
             <div class="card-header">Attack Parameters</div>
@@ -80,7 +80,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Attack Controls -->
         <div class="attack-controls text-center">
             <button id="start-attack-btn" class="btn btn-danger" disabled>Start Attack</button>
@@ -95,7 +95,7 @@
     document.addEventListener('DOMContentLoaded', function() {
         // Load selected network info
         loadSelectedNetworkInfo();
-        
+
         // Setup attack option selection
         const attackOptions = document.querySelectorAll('.attack-option');
         attackOptions.forEach(option => {
@@ -104,19 +104,19 @@
                 attackOptions.forEach(opt => opt.classList.remove('selected'));
                 // Add selection to clicked option
                 this.classList.add('selected');
-                
+
                 // Show configuration for selected attack
                 const attackType = this.dataset.attack;
                 showAttackConfig(attackType);
-                
+
                 // Enable start button
                 document.getElementById('start-attack-btn').disabled = false;
             });
         });
-        
+
         // Setup start attack button
         document.getElementById('start-attack-btn').addEventListener('click', startAttack);
-        
+
         // Setup stop attack button
         document.getElementById('stop-attack-btn').addEventListener('click', stopAttack);
     });

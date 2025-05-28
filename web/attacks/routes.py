@@ -12,9 +12,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 
 # Import shared variables and helpers
 from web.shared import attack_state, stats, config, logger, log_message, reset_attack_state, is_sudo_authenticated
-from web.attacks.helpers import (launch_deauth_attack, launch_handshake_attack, 
+from web.attacks.helpers import (launch_deauth_attack, launch_handshake_attack,
                                launch_evil_twin_attack, update_attack_progress, add_log_message,
-                               dos_attack, launch_karma_attack)
+                               dos_attack, launch_karma_attack, launch_dhcp_attack)
 from web.attacks.icmp_flood import launch_icmp_flood_attack
 from web.attacks.network_scanner import scan_network
 from utils.network_utils import set_managed_mode
@@ -32,7 +32,7 @@ def show_attack():
 def start_attack():
     """
     Start an attack based on the provided parameters.
-    
+
     Expected JSON payload:
     {
         "network": {
@@ -48,30 +48,30 @@ def start_attack():
     """
     # Root execution is enforced at startup, so no need to check here anymore
     try:
-        
+
         # Check if an attack is already running
         if attack_state['running']:
             return jsonify({'success': False, 'error': 'An attack is already running'})
-        
+
         # Validate request data
         data = request.json
         if not data:
             return jsonify({'success': False, 'error': 'No data provided'})
-        
+
         if 'network' not in data or 'attack_type' not in data:
             return jsonify({'success': False, 'error': 'Missing required parameters'})
-        
+
         # Get attack parameters
         network = data['network']
         attack_type = data['attack_type']
         attack_config = data.get('config', {})
-        
+
         # Validate network data
         required_network_fields = ['bssid', 'essid', 'channel']
         for field in required_network_fields:
             if field not in network:
                 return jsonify({'success': False, 'error': f'Missing required network field: {field}'})
-        
+
         # Initialize attack state
         attack_state['running'] = True
         attack_state['attack_type'] = attack_type
@@ -80,16 +80,16 @@ def start_attack():
         attack_state['log'] = []
         attack_state['stop_event'] = threading.Event()
         attack_state['threads'] = []
-        
+
         # Log the start of the attack
         log_message(f"Starting {attack_type} attack on {network['essid']} ({network['bssid']})")
-        
+
         # Emit attack started event via WebSocket
         socketio.emit('attack_started', {
             'attack_type': attack_type,
             'target_network': network
         })
-        
+
         try:
             # Launch the appropriate attack
             if attack_type == 'deauth':
@@ -104,31 +104,33 @@ def start_attack():
                 thread = threading.Thread(target=launch_karma_attack, args=(attack_config,))
             elif attack_type == 'icmp_flood':
                 thread = threading.Thread(target=launch_icmp_flood_attack, args=(attack_config,))
+            elif attack_type == 'dhcp':
+                thread = threading.Thread(target=launch_dhcp_attack, args=(network, attack_config))
             else:
                 reset_attack_state()
                 socketio.emit('attack_error', {'error': f'Unknown attack type: {attack_type}'})
                 return jsonify({'success': False, 'error': f'Unknown attack type: {attack_type}'})
-            
+
             thread.daemon = True
             thread.start()
-            
+
             stats['attacks_count'] += 1
-            
+
             return jsonify({'success': True})
         except Exception as e:
             reset_attack_state()
-            
+
             # Check if the error is related to sudo
             error_str = str(e)
             if "sudo" in error_str.lower() or "permission" in error_str.lower():
                 config['sudo_configured'] = False
                 socketio.emit('attack_error', {'error': 'Administrator privileges required'})
                 return jsonify({
-                    'success': False, 
+                    'success': False,
                     'error': 'sudo_auth_required',
                     'redirect': url_for('settings.sudo_auth', next=request.referrer or url_for('attacks.show_attack'))
                 }), 401
-            
+
             logger.error(f"Error starting attack: {e}")
             socketio.emit('attack_error', {'error': str(e)})
             return jsonify({'success': False, 'error': str(e)})
@@ -139,20 +141,20 @@ def start_attack():
 def stop_attack():
     """Stop the currently running attack"""
     # Root execution is enforced at startup, so no need to check here anymore
-    
+
     if not attack_state['running']:
         return jsonify({'success': False, 'error': 'No attack is running'})
-    
+
     try:
         # Signal threads to stop
         if attack_state['stop_event']:
             attack_state['stop_event'].set()
-        
+
         # Wait for threads to finish
         for thread in attack_state['threads']:
             if thread and thread.is_alive():
                 thread.join(timeout=2)
-        
+
         # Reset interface to managed mode
         success = set_managed_mode(config['interface'])
         if not success:
@@ -160,14 +162,14 @@ def stop_attack():
             error_msg = 'Failed to set interface to managed mode. Continuing with attack cleanup.'
             logger.warning(error_msg)
             socketio.emit('attack_warning', {'warning': error_msg})
-        
+
         # Update attack state
         log_message("Attack stopped")
         reset_attack_state()
-        
+
         # Emit attack stopped event via WebSocket
         socketio.emit('attack_stopped')
-        
+
         return jsonify({'success': True})
     except Exception as e:
         logger.error(f"Error stopping attack: {e}")
@@ -208,5 +210,5 @@ def get_network_devices():
             'success': False,
             'error': str(e)
         })
-    
-    
+
+

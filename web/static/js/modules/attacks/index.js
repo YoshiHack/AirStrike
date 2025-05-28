@@ -12,6 +12,7 @@ import { configureEvilTwin } from './evilTwin.js';
 import { configureDosAttack } from './dosAttack.js';
 import { configureKarma } from './karmaAttack.js';
 import { configureIcmpFlood } from './icmpFlood.js';
+import { configureDhcp, getDhcpConfig, initDhcpConfig, validateDhcpConfig } from './dhcp.js';
 
 // Attack configuration functions map
 const attackConfigFunctions = {
@@ -21,6 +22,7 @@ const attackConfigFunctions = {
     'dos': configureDosAttack,
     'karma': configureKarma,
     'icmp_flood': configureIcmpFlood,
+    'dhcp': configureDhcp,
 };
 
 /**
@@ -32,13 +34,13 @@ export function initAttacks() {
     attackOptions.forEach(option => {
         option.addEventListener('click', () => selectAttackType(option));
     });
-    
+
     // Add event listener for start attack button
     const startAttackBtn = document.getElementById('start-attack-btn');
     if (startAttackBtn) {
         startAttackBtn.addEventListener('click', startAttack);
     }
-    
+
     // Add event listener for stop attack button
     const stopAttackBtn = document.getElementById('stop-attack-btn');
     if (stopAttackBtn) {
@@ -55,17 +57,17 @@ function selectAttackType(attackOption) {
     document.querySelectorAll('.attack-option').forEach(option => {
         option.classList.remove('selected');
     });
-    
+
     // Add selection to clicked attack option
     attackOption.classList.add('selected');
-    
+
     // Store selected attack type
     const attackType = attackOption.dataset.attack;
     setSelectedAttack(attackType);
-    
+
     // Show attack-specific configuration options
     showAttackConfig(attackType);
-    
+
     // Enable the start attack button
     const startAttackBtn = document.getElementById('start-attack-btn');
     if (startAttackBtn) {
@@ -80,13 +82,21 @@ function selectAttackType(attackOption) {
 function showAttackConfig(attackType) {
     const configContainer = document.getElementById('attack-config');
     if (!configContainer) return;
-    
+
     // Get the configuration function for the selected attack type
     const configureFunction = attackConfigFunctions[attackType];
-    
+
     if (configureFunction) {
         const state = getState();
         configContainer.innerHTML = configureFunction(state.selectedNetwork);
+
+        // Initialize DHCP-specific configuration if needed
+        if (attackType === 'dhcp') {
+            // Use setTimeout to ensure DOM is updated
+            setTimeout(() => {
+                initDhcpConfig();
+            }, 100);
+        }
     } else {
         configContainer.innerHTML = '<div class="alert alert-warning">Please select a valid attack type</div>';
     }
@@ -97,12 +107,12 @@ function showAttackConfig(attackType) {
  */
 export async function startAttack() {
     const state = getState();
-    
+
     if (!state.selectedAttack) {
         showAlert('Please select an attack type', 'warning');
         return;
     }
-    
+
     // Special handling for Karma attack since it doesn't need a real network
     let network = state.selectedNetwork;
     if (state.selectedAttack === 'karma') {
@@ -125,10 +135,10 @@ export async function startAttack() {
         showAlert('Please select a target network', 'warning');
         return;
     }
-    
+
     // Collect attack configuration
     const attackConfig = getAttackConfig(state.selectedAttack);
-    
+
     try {
         // Make API call to start attack
         const result = await attackApi.startAttack(
@@ -136,12 +146,12 @@ export async function startAttack() {
             state.selectedAttack,
             attackConfig
         );
-        
+
         if (result.success) {
             setAttackRunning(true);
             showAlert('Attack started successfully', 'success');
             updateAttackStatus(true);
-            
+
             // Redirect to results page
             window.location.href = '/results';
         } else {
@@ -159,7 +169,7 @@ export async function startAttack() {
 export async function stopAttack() {
     try {
         const result = await attackApi.stopAttack();
-        
+
         if (result.success) {
             setAttackRunning(false);
             updateAttackStatus(false);
@@ -179,24 +189,24 @@ export async function stopAttack() {
  */
 function getAttackConfig(attackType) {
     const config = {};
-    
+
     switch(attackType) {
         case 'deauth':
             config.client = document.getElementById('deauth-client')?.value || 'FF:FF:FF:FF:FF:FF';
             config.count = parseInt(document.getElementById('deauth-count')?.value || '10');
             config.interval = parseFloat(document.getElementById('deauth-interval')?.value || '0.1');
             break;
-            
+
         case 'handshake':
             config.wordlist = document.getElementById('handshake-wordlist')?.value || '/usr/share/wordlists/rockyou.txt';
             config.duration = parseInt(document.getElementById('handshake-duration')?.value || '5');
             break;
-            
+
         case 'evil_twin':
             config.channel = parseInt(document.getElementById('evil-twin-channel')?.value || '1');
             config.captive_portal = document.getElementById('evil-twin-captive')?.value === 'true';
             break;
-            
+
         case 'karma':
             config.essid = document.getElementById('karma-network')?.value;
             config.scan_duration = parseInt(document.getElementById('karma-duration')?.value || '20');
@@ -212,8 +222,13 @@ function getAttackConfig(attackType) {
             config.interval = parseInt(document.getElementById('interval')?.value || '0');
             config.thread_count = parseInt(document.getElementById('thread_count')?.value || '4');
             break;
+
+        case 'dhcp':
+            // Use the DHCP-specific configuration function
+            return getDhcpConfig();
+            break;
     }
-    
+
     return config;
 }
 
@@ -223,20 +238,20 @@ function getAttackConfig(attackType) {
 export function startAttackMonitoring() {
     // Check attack status first
     checkAttackStatus();
-    
+
     // Set interval for updates
     const monitoringInterval = setInterval(async () => {
         const state = getState();
-        
+
         if (!state.attackRunning) {
             clearInterval(monitoringInterval);
             return;
         }
-        
+
         await updateAttackLogFromServer();
         await checkAttackStatus();
     }, 2000);
-    
+
     return monitoringInterval;
 }
 
@@ -264,4 +279,4 @@ async function updateAttackLogFromServer() {
     } catch (error) {
         console.error('Error updating attack log:', error);
     }
-} 
+}
