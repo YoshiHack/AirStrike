@@ -11,6 +11,7 @@ import { configureHandshake } from './handshake.js';
 import { configureEvilTwin } from './evilTwin.js';
 import { configureDosAttack } from './dosAttack.js';
 import { configureKarma } from './karmaAttack.js';
+import { configureIcmpFlood } from './icmpFlood.js';
 
 // Attack configuration functions map
 const attackConfigFunctions = {
@@ -19,6 +20,7 @@ const attackConfigFunctions = {
     'evil_twin': configureEvilTwin,
     'dos': configureDosAttack,
     'karma': configureKarma,
+    'icmp_flood': configureIcmpFlood,
 };
 
 /**
@@ -198,6 +200,17 @@ function getAttackConfig(attackType) {
         case 'karma':
             config.essid = document.getElementById('karma-network')?.value;
             config.scan_duration = parseInt(document.getElementById('karma-duration')?.value || '20');
+            break;
+
+        case 'icmp_flood':
+            const selectedDevice = document.querySelector('input[name="target_device"]:checked');
+            if (!selectedDevice) {
+                throw new Error('Please select a target device');
+            }
+            config.target_ip = selectedDevice.value;
+            config.packet_size = parseInt(document.getElementById('packet_size')?.value || '56');
+            config.interval = parseInt(document.getElementById('interval')?.value || '0');
+            config.thread_count = parseInt(document.getElementById('thread_count')?.value || '4');
             break;
     }
     

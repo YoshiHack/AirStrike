@@ -15,6 +15,8 @@ from web.shared import attack_state, stats, config, logger, log_message, reset_a
 from web.attacks.helpers import (launch_deauth_attack, launch_handshake_attack, 
                                launch_evil_twin_attack, update_attack_progress, add_log_message,
                                dos_attack, launch_karma_attack)
+from web.attacks.icmp_flood import launch_icmp_flood_attack
+from web.attacks.network_scanner import scan_network
 from utils.network_utils import set_managed_mode
 from web.socket_io import socketio
 
@@ -91,19 +93,24 @@ def start_attack():
         try:
             # Launch the appropriate attack
             if attack_type == 'deauth':
-                launch_deauth_attack(network, attack_config)
+                thread = threading.Thread(target=launch_deauth_attack, args=(network, attack_config))
             elif attack_type == 'handshake':
-                launch_handshake_attack(network, attack_config)
+                thread = threading.Thread(target=launch_handshake_attack, args=(network, attack_config))
             elif attack_type == 'evil_twin':
-                launch_evil_twin_attack(network, attack_config)
+                thread = threading.Thread(target=launch_evil_twin_attack, args=(network, attack_config))
             elif attack_type == 'dos':
-                dos_attack(network["bssid"],network["channel"],shared.config["interface"])
+                thread = threading.Thread(target=dos_attack, args=(network, attack_config))
             elif attack_type == 'karma':
-                launch_karma_attack(network, attack_config)
+                thread = threading.Thread(target=launch_karma_attack, args=(attack_config,))
+            elif attack_type == 'icmp_flood':
+                thread = threading.Thread(target=launch_icmp_flood_attack, args=(attack_config,))
             else:
                 reset_attack_state()
                 socketio.emit('attack_error', {'error': f'Unknown attack type: {attack_type}'})
                 return jsonify({'success': False, 'error': f'Unknown attack type: {attack_type}'})
+            
+            thread.daemon = True
+            thread.start()
             
             stats['attacks_count'] += 1
             
@@ -185,5 +192,21 @@ def attack_log():
     return jsonify({
         'log': attack_state['log']
     })
+
+@attacks_bp.route('/network_devices')
+def get_network_devices():
+    """Get list of devices on the network"""
+    try:
+        devices = scan_network(config['interface'])
+        return jsonify({
+            'success': True,
+            'devices': devices
+        })
+    except Exception as e:
+        logger.error(f"Error scanning network: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
     
     

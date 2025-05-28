@@ -714,3 +714,71 @@ label {
         margin-bottom: 10px;
     }
 }
+
+/* Device list styles */
+.device-list-container {
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    padding: 15px;
+    background-color: var(--bg-secondary);
+}
+
+.device-list {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+}
+
+.device-item {
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    margin-bottom: 8px;
+    background-color: var(--bg-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.device-item:hover {
+    border-color: var(--accent-primary);
+    background-color: var(--bg-tertiary);
+}
+
+.device-radio {
+    display: none;
+}
+
+.device-radio:checked + .device-label {
+    color: var(--accent-primary);
+}
+
+.device-radio:checked + .device-label .device-item {
+    border-color: var(--accent-primary);
+    background-color: var(--bg-tertiary);
+}
+
+.device-label {
+    display: block;
+    margin: 0;
+    cursor: pointer;
+}
+
+.device-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.device-info strong {
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.device-ip {
+    color: var(--text-secondary);
+    font-size: 0.9em;
+}
+
+.device-mac {
+    color: var(--text-muted);
+    font-size: 0.8em;
+}

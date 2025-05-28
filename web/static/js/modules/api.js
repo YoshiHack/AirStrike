@@ -178,7 +178,13 @@ export const attackApi = {
      * Get the attack log
      * @returns {Promise} - Promise resolving to the attack log
      */
-    getLog: () => apiGet('/attack_log')
+    getLog: () => apiGet('/attack_log'),
+
+    /**
+     * Get list of devices on the network
+     * @returns {Promise} - Promise resolving to the list of devices
+     */
+    getNetworkDevices: () => apiGet('/network_devices')
 };
 
 /**
