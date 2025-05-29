@@ -169,6 +169,7 @@ def stop_attack():
         socketio.emit('attack_error', {'error': str(e)})
         return jsonify({'success': False, 'error': str(e)})
 
+
 @attacks_bp.route('/attack_status')
 def attack_status():
     """Get the current status of the attack"""

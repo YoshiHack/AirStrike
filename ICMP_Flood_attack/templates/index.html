@@ -1,0 +1,517 @@
+{% extends 'base.html' %}
+
+{% block title %}ICMP Flood - Dashboard{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="card">
+    <div class="card-header">ICMP Flood Attack Framework</div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            <p>Welcome to the ICMP Flood Attack Framework! This tool allows you to perform network scanning and ICMP flood attacks for educational and authorized penetration testing purposes only.</p>
+            <p><strong>Warning:</strong> Unauthorized use against networks you do not own or have permission to test is illegal and unethical.</p>
+        </div>
+        
+        <h3>Getting Started</h3>
+        <ol>
+            <li>Go to <strong>Network Scan</strong> to discover hosts on your network</li>
+            <li>Select a target from the scan results</li>
+            <li>Configure and launch an attack from the <strong>Attack</strong> page</li>
+            <li>Monitor attack progress and results in real-time</li>
+        </ol>
+        
+        <div class="d-flex justify-content-between">
+            <a href="/scan" class="btn btn-primary">Scan Network</a>
+            <a href="/attacks/attack" class="btn btn-secondary">Launch Attack</a>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Features</div>
+    <div class="card-body">
+        <div class="attack-options">
+            <div class="attack-options-row">
+                <div class="attack-option">
+                    <h3>Network Scanning</h3>
+                    <p>Discover hosts on your local network using ARP scanning techniques</p>
+                </div>
+                <div class="attack-option">
+                    <h3>ICMP Flood</h3>
+                    <p>Perform ICMP flood attacks to overwhelm target systems</p>
+                </div>
+                <div class="attack-option">
+                    <h3>Real-time Monitoring</h3>
+                    <p>Track attack progress and results in real-time via WebSocket updates</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+            margin-bottom: 30px;
+            padding: 25px;
+            border-radius: 10px;
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+        }
+
+        .section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .button {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            margin: 5px;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .button.danger {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+        }
+
+        .button.success {
+            background: linear-gradient(135deg, #51cf66, #40c057);
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: bold;
+        }
+
+        .status.error {
+            background: #ffe0e0;
+            color: #d63031;
+            border: 1px solid #fab1a0;
+        }
+
+        .status.success {
+            background: #e0ffe0;
+            color: #00b894;
+            border: 1px solid #55efc4;
+        }
+
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .status.info {
+            background: #e3f2fd;
+            color: #1565c0;
+            border: 1px solid #81d4fa;
+        }
+
+        .hosts-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .hosts-table th,
+        .hosts-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .hosts-table th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+
+        .hosts-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .hosts-table tr.selected {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .attack-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .network-info {
+            background: #e8f5e8;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .network-info strong {
+            color: #2d5a2d;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 10px;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            .attack-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 ICMP Flood Attack Tool</h1>
+            <p>Network Security Testing & Educational Tool</p>
+        </div>
+
+        <div class="content">
+            <!-- Privilege Check Section -->
+            <div class="section">
+                <h2>🔐 System Privileges</h2>
+                <div id="privilege-status"></div>
+                <button class="button" onclick="checkPrivileges()">Check Privileges</button>
+            </div>
+
+            <!-- Network Scanning Section -->
+            <div class="section">
+                <h2>🌐 Network Discovery</h2>
+                <div id="network-info"></div>
+                <div id="scan-status"></div>
+                <button class="button" id="scan-btn" onclick="scanNetwork()">Scan Network</button>
+                <div id="loading" class="loading" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Scanning network for live hosts...</p>
+                </div>
+            </div>
+
+            <!-- Target Selection Section -->
+            <div class="section">
+                <h2>🎯 Target Selection</h2>
+                <div id="hosts-container"></div>
+            </div>
+
+            <!-- Attack Control Section -->
+            <div class="section">
+                <h2>⚡ Attack Control</h2>
+                <div id="attack-status"></div>
+                <div class="attack-controls">
+                    <button class="button success" id="start-btn" onclick="startAttack()" disabled>Start Attack</button>
+                    <button class="button danger" id="stop-btn" onclick="stopAttack()" disabled>Stop Attack</button>
+                    <button class="button" onclick="checkAttackStatus()">Refresh Status</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedTarget = null;
+        let hosts = [];
+        let attackStatusInterval = null;
+
+        // Check if running with sudo privileges
+        async function checkPrivileges() {
+            try {
+                const response = await fetch('/api/check-privileges');
+                const data = await response.json();
+                
+                const statusDiv = document.getElementById('privilege-status');
+                if (data.has_sudo) {
+                    statusDiv.innerHTML = '<div class="status success">✅ Running with sudo privileges</div>';
+                } else {
+                    statusDiv.innerHTML = '<div class="status error">❌ Sudo privileges required. Please run with: sudo python3 app.py</div>';
+                }
+            } catch (error) {
+                document.getElementById('privilege-status').innerHTML = 
+                    '<div class="status error">❌ Error checking privileges: ' + error.message + '</div>';
+            }
+        }
+
+        // Scan network for live hosts
+        async function scanNetwork() {
+            const scanBtn = document.getElementById('scan-btn');
+            const loading = document.getElementById('loading');
+            const scanStatus = document.getElementById('scan-status');
+            const hostsContainer = document.getElementById('hosts-container');
+            
+            scanBtn.disabled = true;
+            loading.style.display = 'block';
+            scanStatus.innerHTML = '';
+            hostsContainer.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/scan-network');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    hosts = data.hosts;
+                    
+                    // Display network info
+                    document.getElementById('network-info').innerHTML = 
+                        `<div class="network-info">
+                            <strong>Interface:</strong> ${data.interface}<br>
+                            <strong>IP Range:</strong> ${data.ip_range}<br>
+                            <strong>Hosts Found:</strong> ${hosts.length}
+                        </div>`;
+                    
+                    if (hosts.length > 0) {
+                        displayHosts(hosts);
+                        scanStatus.innerHTML = '<div class="status success">✅ Network scan completed successfully</div>';
+                    } else {
+                        scanStatus.innerHTML = '<div class="status warning">⚠️ No live hosts found on the network</div>';
+                    }
+                } else {
+                    scanStatus.innerHTML = '<div class="status error">❌ ' + data.error + '</div>';
+                }
+            } catch (error) {
+                scanStatus.innerHTML = '<div class="status error">❌ Error scanning network: ' + error.message + '</div>';
+            } finally {
+                scanBtn.disabled = false;
+                loading.style.display = 'none';
+            }
+        }
+
+        // Display discovered hosts in a table
+        function displayHosts(hosts) {
+            const container = document.getElementById('hosts-container');
+            
+            if (hosts.length === 0) {
+                container.innerHTML = '<div class="status warning">No hosts discovered</div>';
+                return;
+            }
+            
+            let tableHTML = `
+                <table class="hosts-table">
+                    <thead>
+                        <tr>
+                            <th>Select</th>
+                            <th>IP Address</th>
+                            <th>MAC Address</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            hosts.forEach((host, index) => {
+                tableHTML += `
+                    <tr id="host-${index}">
+                        <td><input type="radio" name="target" value="${host.ip}" onchange="selectTarget('${host.ip}', ${index})"></td>
+                        <td><strong>${host.ip}</strong></td>
+                        <td><code>${host.mac}</code></td>
+                        <td><button class="button" onclick="selectAndHighlight('${host.ip}', ${index})">Select Target</button></td>
+                    </tr>
+                `;
+            });
+            
+            tableHTML += '</tbody></table>';
+            container.innerHTML = tableHTML;
+        }
+
+        // Select target and highlight row
+        function selectAndHighlight(ip, index) {
+            selectTarget(ip, index);
+            document.querySelector(`input[value="${ip}"]`).checked = true;
+        }
+
+        // Select target for attack
+        function selectTarget(ip, index) {
+            selectedTarget = ip;
+            
+            // Remove previous selection highlighting
+            document.querySelectorAll('.hosts-table tr').forEach(row => {
+                row.classList.remove('selected');
+            });
+            
+            // Highlight selected row
+            document.getElementById(`host-${index}`).classList.add('selected');
+            
+            // Enable start button
+            document.getElementById('start-btn').disabled = false;
+            
+            // Update attack status
+            document.getElementById('attack-status').innerHTML = 
+                `<div class="status info">🎯 Target selected: ${ip}</div>`;
+        }
+
+        // Start ICMP flood attack
+        async function startAttack() {
+            if (!selectedTarget) {
+                alert('Please select a target first');
+                return;
+            }
+            
+            const startBtn = document.getElementById('start-btn');
+            const stopBtn = document.getElementById('stop-btn');
+            
+            try {
+                const response = await fetch('/api/start-attack', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ target_ip: selectedTarget })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('attack-status').innerHTML = 
+                        `<div class="status success">⚡ Attack started on ${selectedTarget}</div>`;
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                    
+                    // Start monitoring attack status
+                    startAttackStatusMonitoring();
+                } else {
+                    document.getElementById('attack-status').innerHTML = 
+                        `<div class="status error">❌ ${data.error}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('attack-status').innerHTML = 
+                    `<div class="status error">❌ Error starting attack: ${error.message}</div>`;
+            }
+        }
+
+        // Stop ICMP flood attack
+        async function stopAttack() {
+            try {
+                const response = await fetch('/api/stop-attack', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('attack-status').innerHTML = 
+                        `<div class="status warning">🛑 Attack stopped</div>`;
+                    document.getElementById('start-btn').disabled = false;
+                    document.getElementById('stop-btn').disabled = true;
+                    
+                    // Stop monitoring
+                    stopAttackStatusMonitoring();
+                } else {
+                    document.getElementById('attack-status').innerHTML = 
+                        `<div class="status error">❌ ${data.error}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('attack-status').innerHTML = 
+                    `<div class="status error">❌ Error stopping attack: ${error.message}</div>`;
+            }
+        }
+
+        // Check current attack status
+        async function checkAttackStatus() {
+            try {
+                const response = await fetch('/api/attack-status');
+                const data = await response.json();
+                
+                const startBtn = document.getElementById('start-btn');
+                const stopBtn = document.getElementById('stop-btn');
+                
+                if (data.running) {
+                    document.getElementById('attack-status').innerHTML = 
+                        `<div class="status success">⚡ Attack running on ${data.target}</div>`;
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                } else {
+                    document.getElementById('attack-status').innerHTML = 
+                        `<div class="status info">💤 No attack currently running</div>`;
+                    startBtn.disabled = !selectedTarget;
+                    stopBtn.disabled = true;
+                }
+            } catch (error) {
+                document.getElementById('attack-status').innerHTML = 
+                    `<div class="status error">❌ Error checking status: ${error.message}</div>`;
+            }
+        }
+
+        // Start monitoring attack status
+        function startAttackStatusMonitoring() {
+            attackStatusInterval = setInterval(checkAttackStatus, 2000);
+        }
+
+        // Stop monitoring attack status
+        function stopAttackStatusMonitoring() {
+            if (attackStatusInterval) {
+                clearInterval(attackStatusInterval);
+                attackStatusInterval = null;
+            }
+        }
+
+        // Initialize the application
+        window.onload = function() {
+            checkPrivileges();
+            checkAttackStatus();
+        };
+
+        // Cleanup on page unload
+        window.onbeforeunload = function() {
+            stopAttackStatusMonitoring();
+        };
+    </script>
+</body>
+</html>

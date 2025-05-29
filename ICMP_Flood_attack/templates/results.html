@@ -1,0 +1,200 @@
+{% extends 'base.html' %}
+
+{% block title %}ICMP Flood - Attack Results{% endblock %}
+
+{% block content %}
+<h1>Attack Results</h1>
+
+<div class="card mb-4">
+    <div class="card-header">Attack Status</div>
+    <div class="card-body">
+        <div id="attack-status">
+            <div id="status-message" class="alert alert-info">
+                Checking attack status...
+            </div>
+            
+            <div id="progress-container" style="display: none;">
+                <h4>Progress</h4>
+                <div class="progress">
+                    <div id="progress-bar" class="progress-bar" style="width: 0%"></div>
+                </div>
+                <p id="progress-text">0%</p>
+            </div>
+            
+            <div id="attack-controls" style="display: none;">
+                <button id="stop-attack-btn" class="btn btn-danger">Stop Attack</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Attack Log</div>
+    <div class="card-body">
+        <div id="attack-log" class="console">
+            <!-- Log messages will be inserted here -->
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Socket.IO connection
+    const socket = io();
+    
+    // Page elements
+    const statusMessage = document.getElementById('status-message');
+    const progressContainer = document.getElementById('progress-container');
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    const attackControls = document.getElementById('attack-controls');
+    const stopAttackBtn = document.getElementById('stop-attack-btn');
+    const attackLog = document.getElementById('attack-log');
+    
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', function() {
+        // Check attack status
+        checkAttackStatus();
+        
+        // Button handlers
+        stopAttackBtn.addEventListener('click', stopAttack);
+        
+        // Periodically check attack status
+        setInterval(checkAttackStatus, 5000);
+    });
+    
+    // Socket.IO event handlers
+    socket.on('attack_progress', function(data) {
+        updateProgress(data.progress);
+    });
+    
+    socket.on('attack_log', function(data) {
+        addLogMessage(data.message);
+    });
+    
+    socket.on('attack_stopped', function(data) {
+        updateStatus('stopped');
+    });
+    
+    socket.on('attack_error', function(data) {
+        addLogMessage('ERROR: ' + data.error);
+        updateStatus('error');
+    });
+    
+    // Check attack status
+    function checkAttackStatus() {
+        fetch('/attacks/attack_status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.running) {
+                    updateStatus('running', data.attack_type);
+                    updateProgress(data.progress);
+                } else {
+                    updateStatus('stopped');
+                }
+                
+                // Get attack log
+                return fetch('/results/get_attack_log');
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Clear and update log
+                attackLog.innerHTML = '';
+                
+                // Add log messages
+                if (data.log && data.log.length > 0) {
+                    data.log.forEach(message => {
+                        addLogMessage(message);
+                    });
+                } else {
+                    addLogMessage('No log messages available.');
+                }
+            })
+            .catch(error => {
+                console.error('Error checking attack status:', error);
+            });
+    }
+    
+    // Update attack status UI
+    function updateStatus(status, attackType) {
+        switch (status) {
+            case 'running':
+                statusMessage.className = 'alert alert-warning';
+                statusMessage.innerHTML = `
+                    <strong>Attack Running:</strong> ${attackType || 'Unknown attack'} in progress
+                `;
+                progressContainer.style.display = 'block';
+                attackControls.style.display = 'block';
+                break;
+                
+            case 'stopped':
+                statusMessage.className = 'alert alert-success';
+                statusMessage.innerHTML = '<strong>Attack Stopped</strong>';
+                progressContainer.style.display = 'none';
+                attackControls.style.display = 'none';
+                break;
+                
+            case 'error':
+                statusMessage.className = 'alert alert-danger';
+                statusMessage.innerHTML = '<strong>Attack Error</strong>';
+                progressContainer.style.display = 'none';
+                attackControls.style.display = 'none';
+                break;
+                
+            default:
+                statusMessage.className = 'alert alert-info';
+                statusMessage.innerHTML = '<strong>No Attack Running</strong>';
+                progressContainer.style.display = 'none';
+                attackControls.style.display = 'none';
+        }
+    }
+    
+    // Update progress bar
+    function updateProgress(progress) {
+        progressBar.style.width = progress + '%';
+        progressText.textContent = progress + '%';
+    }
+    
+    // Add log message
+    function addLogMessage(message) {
+        const messageElement = document.createElement('div');
+        messageElement.textContent = message;
+        attackLog.appendChild(messageElement);
+        
+        // Scroll to bottom
+        attackLog.scrollTop = attackLog.scrollHeight;
+    }
+    
+    // Stop attack
+    function stopAttack() {
+        stopAttackBtn.disabled = true;
+        
+        fetch('/attacks/stop_attack', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({}),
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error: ' + data.error);
+                stopAttackBtn.disabled = false;
+                return;
+            }
+            
+            // Update UI
+            updateStatus('stopped');
+            addLogMessage('Attack stopped by user.');
+        })
+        .catch(error => {
+            alert('Error stopping attack: ' + error);
+            console.error('Error:', error);
+            stopAttackBtn.disabled = false;
+        });
+    }
+</script>
+{% endblock %}

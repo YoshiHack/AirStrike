@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block title %}ICMP Flood - Network Scan{% endblock %}
+
+{% block content %}
+<h1>Network Scan</h1>
+
+<div class="card">
+    <div class="card-header">Scan Configuration</div>
+    <div class="card-body">
+        <div class="form-group">
+            <button id="start-scan-btn" class="btn btn-primary">Start Network Scan</button>
+        </div>
+        <div id="scan-status" class="alert alert-info" style="display: none;">
+            Scanning network for hosts...
+        </div>
+    </div>
+</div>
+
+<div class="card" id="scan-results-card" style="display: none;">
+    <div class="card-header">Scan Results</div>
+    <div class="card-body">
+        <table id="networks-table">
+            <thead>
+                <tr>
+                    <th>Host IP</th>
+                    <th>MAC Address</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="networks-list">
+                <!-- Scan results will be inserted here -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Socket.IO connection
+    const socket = io();
+    
+    // Page elements
+    const startScanBtn = document.getElementById('start-scan-btn');
+    const scanStatus = document.getElementById('scan-status');
+    const scanResultsCard = document.getElementById('scan-results-card');
+    const networksList = document.getElementById('networks-list');
+    
+    // Global state
+    let selectedNetwork = null;
+    
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', function() {
+        // Start scan button handler
+        startScanBtn.addEventListener('click', startScan);
+    });
+    
+    // Socket.IO event handlers
+    socket.on('scan_update', function(data) {
+        if (data.status === 'complete') {
+            scanComplete(data.networks);
+        }
+    });
+    
+    // Start network scan
+    function startScan() {
+        // Update UI
+        startScanBtn.disabled = true;
+        scanStatus.style.display = 'block';
+        scanResultsCard.style.display = 'none';
+        networksList.innerHTML = '';
+        
+        // Make API request
+        fetch('/api/scan-network')
+            .then(response => response.json())
+            .then(data => {
+                // Update UI
+                startScanBtn.disabled = false;
+                scanStatus.style.display = 'none';
+                
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    return;
+                }
+                
+                // Display results
+                scanComplete(data.networks);
+            })
+            .catch(error => {
+                startScanBtn.disabled = false;
+                scanStatus.style.display = 'none';
+                alert('Error scanning network: ' + error);
+                console.error('Error:', error);
+            });
+    }
+    
+    // Display scan results
+    function scanComplete(networks) {
+        if (!networks || networks.length === 0) {
+            networksList.innerHTML = '<tr><td colspan="3">No hosts found</td></tr>';
+            scanResultsCard.style.display = 'block';
+            return;
+        }
+        
+        // Build table rows
+        let html = '';
+        networks.forEach(network => {
+            html += `
+                <tr data-bssid="${network.BSSID}" data-ip="${network.ip}">
+                    <td>${network.ip}</td>
+                    <td>${network.BSSID}</td>
+                    <td>
+                        <button class="btn btn-primary btn-sm select-target-btn" 
+                                data-bssid="${network.BSSID}" 
+                                data-essid="Host ${network.ip}"
+                                data-ip="${network.ip}">
+                            Select as Target
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+        
+        // Update table
+        networksList.innerHTML = html;
+        scanResultsCard.style.display = 'block';
+        
+        // Add event listeners to select target buttons
+        document.querySelectorAll('.select-target-btn').forEach(btn => {
+            btn.addEventListener('click', selectTarget);
+        });
+    }
+    
+    // Select target network
+    function selectTarget(event) {
+        const btn = event.currentTarget;
+        
+        // Get network info
+        const network = {
+            BSSID: btn.dataset.bssid,
+            ESSID: btn.dataset.essid,
+            ip: btn.dataset.ip,
+            channel: 'N/A'
+        };
+        
+        // Store in session storage
+        sessionStorage.setItem('selectedNetwork', JSON.stringify(network));
+        
+        // Navigate to attack page
+        window.location.href = '/attacks/attack';
+    }
+</script>
+{% endblock %}
