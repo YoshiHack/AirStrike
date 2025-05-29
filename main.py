@@ -1,3 +1,7 @@
+#!/usr/bin/env python3
+"""
+AirStrike CLI Interface for Testing
+"""
 import os
 import time
 import subprocess
