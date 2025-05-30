@@ -60,9 +60,9 @@ def create_app():
         from .main_routes import main_bp
         from .scan_routes import scan_bp
         from .attack_routes import attacks_bp
-        from .settings_routes import settings_bp
-        from .results_routes import results_bp
-        from .diagnostics_routes import diagnostics_bp
+        from settings_routes import settings_bp
+        from results_routes import results_bp
+        from diagnostics_routes import diagnostics_bp
     except ImportError as e:
         app.logger.critical(f"Failed to import one or more blueprint modules: {e}", exc_info=True)
         # This is a critical error, so re-raise it to prevent the app from starting incorrectly.

