@@ -59,10 +59,10 @@ def create_app():
     try:
         from .main_routes import main_bp
         from .scan_routes import scan_bp
-        from .attack_routes import attacks_bp
-        from settings_routes import settings_bp
-        from results_routes import results_bp
-        from diagnostics_routes import diagnostics_bp
+        from .attack_routes import attack_bp # Corrected name
+        from .settings_routes import settings_bp # Added relative import
+        from .result_routes import results_bp # Added relative import
+        from .diagnostics_routes import diagnostics_bp # Added relative import
     except ImportError as e:
         app.logger.critical(f"Failed to import one or more blueprint modules: {e}", exc_info=True)
         # This is a critical error, so re-raise it to prevent the app from starting incorrectly.
@@ -70,7 +70,7 @@ def create_app():
 
     app.register_blueprint(main_bp)  # Root routes like '/'
     app.register_blueprint(scan_bp, url_prefix='/scan')
-    app.register_blueprint(attacks_bp, url_prefix='/attack')
+    app.register_blueprint(attack_bp, url_prefix='/attack') # Corrected name
     app.register_blueprint(settings_bp, url_prefix='/settings')
     app.register_blueprint(results_bp, url_prefix='/results')
     app.register_blueprint(diagnostics_bp, url_prefix='/diagnostics')
