@@ -288,6 +288,8 @@ def dos_attack(bssid, channel, interface):
         channel (str): Target channel
         interface (str): Wireless interface to use
     """
+    from web.shared import attack_state
+
     # Set monitor mode using the network_utils function
     add_log_message(f"[DoS] Setting {interface} to monitor mode...")
     set_monitor_mode(interface)

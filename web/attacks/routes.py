@@ -99,7 +99,7 @@ def start_attack():
             elif attack_type == 'evil_twin':
                 thread = threading.Thread(target=launch_evil_twin_attack, args=(network, attack_config))
             elif attack_type == 'dos':
-                thread = threading.Thread(target=dos_attack, args=(network, attack_config))
+                thread = threading.Thread(target=dos_attack, args=(network["bssid"], network["channel"], config["interface"]))
             elif attack_type == 'karma':
                 thread = threading.Thread(target=launch_karma_attack, args=(network, attack_config))
             elif attack_type == 'icmp_flood':
