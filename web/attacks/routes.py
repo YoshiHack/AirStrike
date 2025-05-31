@@ -101,7 +101,7 @@ def start_attack():
             elif attack_type == 'dos':
                 thread = threading.Thread(target=dos_attack, args=(network, attack_config))
             elif attack_type == 'karma':
-                thread = threading.Thread(target=launch_karma_attack, args=(attack_config,))
+                thread = threading.Thread(target=launch_karma_attack, args=(network, attack_config))
             elif attack_type == 'icmp_flood':
                 thread = threading.Thread(target=launch_icmp_flood_attack, args=(attack_config,))
             elif attack_type == 'dhcp':
